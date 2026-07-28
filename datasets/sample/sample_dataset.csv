@@ -1,0 +1,101 @@
+Order_ID,Customer_ID,Date,Age,Gender,City,Product_Category,Unit_Price,Quantity,Discount_Amount,Total_Amount,Payment_Method,Device_Type,Session_Duration_Minutes,Pages_Viewed,Is_Returning_Customer,Delivery_Time_Days,Customer_Rating
+ORD_000001-1,CUST_00001,2023-05-29,40,Male,Ankara,Books,29.18,1,0.0,29.18,Digital Wallet,Mobile,14,9,True,13,4
+ORD_000001-2,CUST_00001,2023-10-12,40,Male,Ankara,Home & Garden,644.4,1,138.05,506.35,Credit Card,Desktop,14,8,True,6,2
+ORD_000001-3,CUST_00001,2023-12-05,40,Male,Ankara,Sports,332.82,5,0.0,1664.1,Credit Card,Mobile,15,10,True,9,4
+ORD_000002-1,CUST_00002,2023-05-11,33,Male,Istanbul,Food,69.3,5,71.05,275.45,Digital Wallet,Desktop,16,13,True,4,4
+ORD_000002-2,CUST_00002,2023-06-16,33,Male,Istanbul,Beauty,178.15,3,0.0,534.45,Credit Card,Mobile,14,7,True,6,4
+ORD_000003-1,CUST_00003,2023-02-27,42,Male,Konya,Toys,198.28,2,0.0,396.56,Credit Card,Tablet,10,9,False,6,2
+ORD_000003-2,CUST_00003,2024-01-03,42,Male,Konya,Home & Garden,526.85,5,0.0,2634.25,Digital Wallet,Desktop,11,8,True,6,5
+ORD_000004-1,CUST_00004,2024-02-13,53,Male,Izmir,Fashion,96.2,5,97.78,383.22,Credit Card,Desktop,16,15,False,4,5
+ORD_000005-1,CUST_00005,2023-03-16,32,Male,Ankara,Home & Garden,533.67,3,0.0,1601.01,Bank Transfer,Mobile,12,8,False,5,5
+ORD_000005-2,CUST_00005,2023-06-12,32,Male,Ankara,Toys,73.06,4,0.0,292.24,Credit Card,Mobile,13,12,True,7,2
+ORD_000005-3,CUST_00005,2023-06-21,32,Male,Ankara,Fashion,529.48,1,0.0,529.48,Credit Card,Desktop,13,8,True,5,4
+ORD_000006-1,CUST_00006,2023-07-24,32,Female,Istanbul,Beauty,139.07,5,0.0,695.35,Debit Card,Desktop,17,9,True,10,4
+ORD_000006-2,CUST_00006,2023-08-07,32,Female,Istanbul,Beauty,144.63,1,12.77,131.86,Credit Card,Mobile,14,9,True,6,4
+ORD_000006-3,CUST_00006,2023-08-27,32,Female,Istanbul,Food,139.54,3,0.0,418.62,Digital Wallet,Mobile,17,10,True,7,5
+ORD_000007-1,CUST_00007,2024-01-05,53,Female,Ankara,Fashion,294.9,5,142.95,1331.55,Cash on Delivery,Mobile,17,9,True,7,4
+ORD_000008-1,CUST_00008,2023-09-14,44,Female,Konya,Sports,913.94,1,190.15,723.79,Credit Card,Desktop,14,11,False,4,5
+ORD_000008-2,CUST_00008,2023-10-07,44,Female,Konya,Sports,1197.86,4,0.0,4791.44,Debit Card,Mobile,19,9,True,5,5
+ORD_000008-3,CUST_00008,2023-10-09,44,Female,Konya,Toys,87.06,1,0.0,87.06,Debit Card,Desktop,18,7,True,9,4
+ORD_000009-1,CUST_00009,2024-02-16,29,Male,Ankara,Fashion,235.43,2,0.0,470.86,Debit Card,Desktop,11,11,False,2,3
+ORD_000010-1,CUST_00010,2023-08-15,41,Male,Kayseri,Fashion,444.19,1,0.0,444.19,Credit Card,Mobile,14,11,True,2,2
+ORD_000010-2,CUST_00010,2023-12-17,41,Male,Kayseri,Books,109.25,5,0.0,546.25,Debit Card,Mobile,14,8,True,10,5
+ORD_000010-3,CUST_00010,2024-03-04,41,Male,Kayseri,Beauty,107.68,4,0.0,430.72,Credit Card,Desktop,15,8,True,2,5
+ORD_000011-1,CUST_00011,2023-04-08,29,Male,Kayseri,Beauty,212.45,4,0.0,849.8,Credit Card,Mobile,8,8,True,5,5
+ORD_000011-2,CUST_00011,2023-05-23,29,Male,Kayseri,Fashion,161.63,3,0.0,484.89,Credit Card,Mobile,12,14,True,7,5
+ORD_000011-3,CUST_00011,2023-11-05,29,Male,Kayseri,Electronics,506.22,5,0.0,2531.1,Digital Wallet,Mobile,12,4,True,14,5
+ORD_000011-4,CUST_00011,2023-12-11,29,Male,Kayseri,Beauty,146.81,4,69.74,517.5,Bank Transfer,Desktop,18,8,True,2,4
+ORD_000011-5,CUST_00011,2023-12-14,29,Male,Kayseri,Sports,666.57,3,208.58,1791.13,Credit Card,Desktop,14,10,True,4,4
+ORD_000011-6,CUST_00011,2024-01-13,29,Male,Kayseri,Books,20.54,2,0.0,41.08,Debit Card,Mobile,15,8,True,5,4
+ORD_000011-7,CUST_00011,2024-03-14,29,Male,Kayseri,Toys,22.59,5,0.0,112.95,Credit Card,Mobile,12,13,True,2,5
+ORD_000012-1,CUST_00012,2024-02-02,29,Other,Istanbul,Toys,264.8,3,0.0,794.4,Debit Card,Desktop,8,7,False,9,4
+ORD_000013-1,CUST_00013,2023-02-09,37,Female,Istanbul,Home & Garden,799.42,1,172.04,627.38,Digital Wallet,Mobile,12,7,True,13,5
+ORD_000013-2,CUST_00013,2024-02-25,37,Female,Istanbul,Food,40.59,1,0.0,40.59,Digital Wallet,Mobile,13,6,True,5,5
+ORD_000014-1,CUST_00014,2023-01-22,18,Female,Konya,Food,74.76,1,0.0,74.76,Debit Card,Desktop,13,6,True,5,3
+ORD_000014-2,CUST_00014,2023-09-28,18,Female,Konya,Beauty,91.17,5,0.0,455.85,Credit Card,Desktop,17,5,True,9,2
+ORD_000014-3,CUST_00014,2023-10-08,18,Female,Konya,Books,19.95,1,0.0,19.95,Credit Card,Mobile,15,7,True,6,4
+ORD_000015-1,CUST_00015,2023-02-13,18,Male,Ankara,Electronics,1880.69,3,0.0,5642.07,Credit Card,Mobile,18,12,False,4,4
+ORD_000015-2,CUST_00015,2023-05-15,18,Male,Ankara,Sports,341.87,2,0.0,683.74,Debit Card,Mobile,15,9,True,8,1
+ORD_000015-3,CUST_00015,2023-08-20,18,Male,Ankara,Electronics,4537.8,3,2752.15,10861.25,Digital Wallet,Mobile,11,10,True,5,4
+ORD_000015-4,CUST_00015,2023-10-15,18,Male,Ankara,Books,129.65,2,38.85,220.45,Cash on Delivery,Desktop,11,7,True,4,4
+ORD_000016-1,CUST_00016,2023-01-23,28,Female,Istanbul,Electronics,930.34,2,194.12,1666.56,Bank Transfer,Mobile,14,7,True,8,4
+ORD_000016-2,CUST_00016,2023-04-17,28,Female,Istanbul,Electronics,1121.29,5,1053.3,4553.15,Digital Wallet,Mobile,14,8,True,8,5
+ORD_000016-3,CUST_00016,2023-07-07,28,Female,Istanbul,Food,26.54,2,0.0,53.08,Digital Wallet,Desktop,18,12,True,4,1
+ORD_000016-4,CUST_00016,2023-07-13,28,Female,Istanbul,Toys,105.22,5,61.67,464.43,Debit Card,Mobile,17,9,True,3,3
+ORD_000016-5,CUST_00016,2023-08-22,28,Female,Istanbul,Food,36.33,4,12.66,132.66,Debit Card,Tablet,12,9,True,6,4
+ORD_000016-6,CUST_00016,2023-11-10,28,Female,Istanbul,Food,25.36,4,0.0,101.44,Credit Card,Mobile,12,8,True,3,4
+ORD_000016-7,CUST_00016,2023-12-01,28,Female,Istanbul,Toys,303.05,2,0.0,606.1,Debit Card,Tablet,9,5,True,7,3
+ORD_000016-8,CUST_00016,2024-01-13,28,Female,Istanbul,Food,63.94,1,0.0,63.94,Credit Card,Tablet,19,8,True,11,4
+ORD_000016-9,CUST_00016,2024-01-25,28,Female,Istanbul,Books,19.2,3,0.0,57.6,Credit Card,Mobile,18,10,True,5,5
+ORD_000016-10,CUST_00016,2024-02-02,28,Female,Istanbul,Beauty,76.52,1,0.0,76.52,Credit Card,Desktop,11,11,True,5,3
+ORD_000017-1,CUST_00017,2023-09-27,22,Male,Ankara,Home & Garden,301.17,3,0.0,903.51,Debit Card,Mobile,13,9,True,6,5
+ORD_000018-1,CUST_00018,2023-01-01,38,Female,Bursa,Books,20.84,5,0.0,104.2,Bank Transfer,Mobile,17,10,True,5,4
+ORD_000018-2,CUST_00018,2023-09-21,38,Female,Bursa,Food,132.37,4,0.0,529.48,Digital Wallet,Tablet,17,8,True,8,4
+ORD_000018-3,CUST_00018,2023-12-19,38,Female,Bursa,Beauty,101.08,5,0.0,505.4,Credit Card,Mobile,11,10,True,7,5
+ORD_000018-4,CUST_00018,2024-03-18,38,Female,Bursa,Home & Garden,668.66,3,0.0,2005.98,Credit Card,Desktop,10,9,True,5,5
+ORD_000019-1,CUST_00019,2024-02-28,24,Female,Gaziantep,Fashion,431.39,2,189.68,673.1,Digital Wallet,Mobile,17,9,True,4,4
+ORD_000020-1,CUST_00020,2023-12-19,18,Female,Istanbul,Beauty,241.88,3,0.0,725.64,Debit Card,Mobile,7,12,True,13,5
+ORD_000020-2,CUST_00020,2024-02-05,18,Female,Istanbul,Home & Garden,925.76,2,0.0,1851.52,Credit Card,Mobile,12,7,True,10,4
+ORD_000021-1,CUST_00021,2023-10-27,52,Female,Istanbul,Books,58.8,5,0.0,294.0,Digital Wallet,Mobile,15,6,False,7,4
+ORD_000021-2,CUST_00021,2024-01-20,52,Female,Istanbul,Sports,1062.74,4,0.0,4250.96,Digital Wallet,Mobile,14,7,True,5,4
+ORD_000021-3,CUST_00021,2024-03-18,52,Female,Istanbul,Fashion,186.29,4,89.74,655.42,Debit Card,Mobile,18,10,True,9,5
+ORD_000022-1,CUST_00022,2023-05-28,32,Male,Kayseri,Toys,80.94,3,0.0,242.82,Credit Card,Desktop,17,9,False,6,3
+ORD_000022-2,CUST_00022,2023-06-15,32,Male,Kayseri,Beauty,55.11,4,0.0,220.44,Cash on Delivery,Mobile,16,8,True,4,4
+ORD_000022-3,CUST_00022,2023-09-02,32,Male,Kayseri,Books,23.82,5,0.0,119.1,Credit Card,Desktop,15,9,True,5,5
+ORD_000022-4,CUST_00022,2024-01-21,32,Male,Kayseri,Sports,351.2,1,0.0,351.2,Cash on Delivery,Mobile,17,5,True,3,4
+ORD_000023-1,CUST_00023,2023-12-14,35,Female,Adana,Fashion,105.55,1,0.0,105.55,Cash on Delivery,Mobile,15,7,True,10,5
+ORD_000024-1,CUST_00024,2023-04-16,18,Female,Bursa,Books,35.95,2,13.08,58.82,Credit Card,Desktop,17,5,False,4,5
+ORD_000024-2,CUST_00024,2023-04-17,18,Female,Bursa,Books,70.37,5,76.68,275.17,Credit Card,Mobile,10,10,True,10,4
+ORD_000025-1,CUST_00025,2023-01-28,28,Male,Adana,Home & Garden,442.0,2,66.41,817.59,Credit Card,Desktop,9,11,True,2,5
+ORD_000025-2,CUST_00025,2023-07-02,28,Male,Adana,Home & Garden,270.73,1,26.66,244.07,Debit Card,Desktop,14,7,True,7,5
+ORD_000026-1,CUST_00026,2023-06-18,36,Male,Izmir,Fashion,356.97,1,0.0,356.97,Digital Wallet,Mobile,16,11,False,9,5
+ORD_000026-2,CUST_00026,2023-06-24,36,Male,Izmir,Beauty,108.41,4,0.0,433.64,Debit Card,Mobile,13,3,True,10,5
+ORD_000027-1,CUST_00027,2023-01-10,21,Male,Adana,Toys,314.84,4,0.0,1259.36,Debit Card,Mobile,14,8,False,9,4
+ORD_000027-2,CUST_00027,2023-02-07,21,Male,Adana,Books,39.46,3,23.26,95.12,Bank Transfer,Tablet,11,5,True,6,5
+ORD_000027-3,CUST_00027,2023-08-01,21,Male,Adana,Sports,235.3,1,51.02,184.28,Credit Card,Mobile,15,15,True,9,5
+ORD_000027-4,CUST_00027,2024-02-25,21,Male,Adana,Sports,323.32,4,254.43,1038.85,Credit Card,Mobile,13,7,True,7,3
+ORD_000028-1,CUST_00028,2023-02-07,39,Male,Ankara,Fashion,224.5,3,0.0,673.5,Debit Card,Mobile,16,10,True,3,5
+ORD_000028-2,CUST_00028,2023-11-19,39,Male,Ankara,Books,52.8,4,19.28,191.92,Bank Transfer,Desktop,14,7,True,3,3
+ORD_000029-1,CUST_00029,2023-03-26,27,Male,Istanbul,Books,39.02,4,0.0,156.08,Bank Transfer,Desktop,12,7,True,3,2
+ORD_000029-2,CUST_00029,2023-04-12,27,Male,Istanbul,Food,104.4,2,41.48,167.32,Bank Transfer,Mobile,17,12,True,4,4
+ORD_000029-3,CUST_00029,2023-05-18,27,Male,Istanbul,Sports,1033.1,1,196.65,836.45,Debit Card,Mobile,15,11,True,8,3
+ORD_000029-4,CUST_00029,2023-06-08,27,Male,Istanbul,Sports,522.47,3,0.0,1567.41,Digital Wallet,Mobile,17,8,True,4,4
+ORD_000029-5,CUST_00029,2023-07-31,27,Male,Istanbul,Sports,535.63,4,247.41,1895.11,Debit Card,Desktop,13,12,True,5,3
+ORD_000029-6,CUST_00029,2023-11-20,27,Male,Istanbul,Beauty,136.76,2,41.31,232.21,Credit Card,Desktop,14,10,True,8,1
+ORD_000029-7,CUST_00029,2023-12-29,27,Male,Istanbul,Electronics,2976.0,4,2546.49,9357.51,Digital Wallet,Desktop,20,12,True,3,4
+ORD_000029-8,CUST_00029,2024-03-25,27,Male,Istanbul,Electronics,1297.3,1,212.87,1084.43,Credit Card,Mobile,17,8,True,7,5
+ORD_000030-1,CUST_00030,2023-01-05,31,Female,Adana,Beauty,64.31,1,12.11,52.2,Credit Card,Desktop,9,13,True,8,5
+ORD_000030-2,CUST_00030,2023-01-10,31,Female,Adana,Fashion,499.86,5,0.0,2499.3,Credit Card,Tablet,10,7,True,12,5
+ORD_000030-3,CUST_00030,2023-04-24,31,Female,Adana,Beauty,106.87,4,52.55,374.93,Debit Card,Desktop,15,6,True,3,3
+ORD_000030-4,CUST_00030,2023-08-15,31,Female,Adana,Home & Garden,1389.24,2,0.0,2778.48,Digital Wallet,Mobile,12,10,True,8,2
+ORD_000030-5,CUST_00030,2023-08-20,31,Female,Adana,Toys,131.27,3,0.0,393.81,Bank Transfer,Desktop,18,12,True,4,5
+ORD_000030-6,CUST_00030,2023-09-06,31,Female,Adana,Food,60.0,3,0.0,180.0,Digital Wallet,Desktop,19,9,True,6,4
+ORD_000030-7,CUST_00030,2024-02-08,31,Female,Adana,Electronics,3263.55,4,0.0,13054.2,Credit Card,Mobile,15,13,True,4,5
+ORD_000031-1,CUST_00031,2023-03-17,27,Male,Izmir,Food,53.71,3,0.0,161.13,Bank Transfer,Mobile,15,11,False,9,4
+ORD_000031-2,CUST_00031,2024-03-08,27,Male,Izmir,Food,57.81,3,0.0,173.43,Cash on Delivery,Desktop,13,7,True,8,5
+ORD_000031-3,CUST_00031,2024-03-09,27,Male,Izmir,Books,90.01,2,0.0,180.02,Credit Card,Mobile,12,8,True,2,4
+ORD_000032-1,CUST_00032,2023-08-18,57,Male,Eskisehir,Books,22.68,2,0.0,45.36,Debit Card,Tablet,18,9,True,5,3
+ORD_000033-1,CUST_00033,2023-04-30,34,Female,Ankara,Toys,83.15,1,0.0,83.15,Credit Card,Mobile,14,12,False,5,3
+ORD_000033-2,CUST_00033,2023-11-08,34,Female,Ankara,Home & Garden,353.02,1,20.79,332.23,Credit Card,Mobile,14,11,True,9,4
+ORD_000034-1,CUST_00034,2023-01-26,22,Female,Kayseri,Electronics,1955.82,3,930.12,4937.34,Bank Transfer,Desktop,15,9,True,6,5
+ORD_000034-2,CUST_00034,2023-03-23,22,Female,Kayseri,Fashion,682.48,2,0.0,1364.96,Credit Card,Mobile,16,11,True,12,5

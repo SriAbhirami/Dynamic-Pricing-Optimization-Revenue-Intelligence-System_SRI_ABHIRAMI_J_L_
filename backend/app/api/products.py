@@ -3,25 +3,29 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.products import Product
-from app.schemas.product import ProductCreate, ProductResponse
+from app.schemas.product import (
+    ProductCreate,
+    ProductResponse,
+    ProductListResponse,
+)
 from app.auth.oauth2 import get_current_user
 
 router = APIRouter(
     prefix="/products",
-    tags=["Products"]
+    tags=["Products"],
 )
 
 
 # =========================
 # Get Products
 # =========================
-@router.get("/", response_model=list[ProductResponse])
+@router.get("/", response_model=ProductListResponse)
 def get_products(
     current_user=Depends(get_current_user),
     name: str | None = None,
     category: str | None = None,
     min_price: float | None = None,
-    max_price: float | None = None,
+    max_price: float |None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     sort_by: str | None = None,
@@ -30,6 +34,10 @@ def get_products(
 ):
 
     query = db.query(Product)
+
+    # -----------------------
+    # Validation
+    # -----------------------
 
     if (
         min_price is not None
@@ -46,6 +54,10 @@ def get_products(
             status_code=400,
             detail="Order must be either 'asc' or 'desc'",
         )
+
+    # -----------------------
+    # Filters
+    # -----------------------
 
     if name:
         query = query.filter(
@@ -66,6 +78,10 @@ def get_products(
         query = query.filter(
             Product.current_price <= max_price
         )
+
+    # -----------------------
+    # Sorting
+    # -----------------------
 
     sortable_columns = {
         "name": Product.name,
@@ -90,7 +106,29 @@ def get_products(
         else:
             query = query.order_by(column.asc())
 
-    return query.offset(skip).limit(limit).all()
+    # -----------------------
+    # Total Count
+    # -----------------------
+
+    total = query.count()
+
+    # -----------------------
+    # Pagination
+    # -----------------------
+
+    products = (
+        query
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": products,
+        "total": total,
+        "page": (skip // limit) + 1,
+        "limit": limit,
+    }
 
 
 # =========================
