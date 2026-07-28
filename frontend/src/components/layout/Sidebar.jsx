@@ -5,54 +5,70 @@ import {
   TrendingUp,
   Brain,
   Settings,
-  LogOut
+  LogOut,
 } from "lucide-react";
 
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+
 function Sidebar() {
+
   const location = useLocation();
   const navigate = useNavigate();
 
+
   const menuItems = [
+
     {
       name: "Dashboard",
       icon: LayoutDashboard,
       path: "/dashboard",
     },
+
     {
       name: "Products",
       icon: Package,
       path: "/products",
     },
+
     {
-      name: "Pricing",
+      name: "Pricing Intelligence",
       icon: DollarSign,
-      path: "/pricing",
+      path: "/pricing-intelligence",
     },
+
     {
       name: "Forecast",
       icon: TrendingUp,
       path: "/forecast",
     },
+
     {
       name: "AI Insights",
       icon: Brain,
       path: "/insights",
     },
+
     {
       name: "Settings",
       icon: Settings,
       path: "/settings",
     },
+
   ];
 
+
   const handleLogout = () => {
+
     localStorage.removeItem("token");
+
     navigate("/");
+
   };
 
+
   return (
+
     <aside className="w-72 bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900 text-white flex flex-col">
 
       <div className="p-8 border-b border-slate-700">
@@ -67,6 +83,7 @@ function Sidebar() {
 
       </div>
 
+
       <nav className="flex-1 p-5 space-y-3">
 
         {menuItems.map((item) => {
@@ -75,7 +92,9 @@ function Sidebar() {
 
           const active = location.pathname === item.path;
 
+
           return (
+
             <Link
               key={item.name}
               to={item.path}
@@ -85,15 +104,19 @@ function Sidebar() {
                   : "hover:bg-slate-800"
               }`}
             >
+
               <Icon size={22} />
 
               <span>{item.name}</span>
 
             </Link>
+
           );
+
         })}
 
       </nav>
+
 
       <div className="p-5 border-t border-slate-700">
 
@@ -117,19 +140,25 @@ function Sidebar() {
 
         </div>
 
+
         <button
           onClick={handleLogout}
           className="w-full bg-red-500 hover:bg-red-600 rounded-xl py-3 flex justify-center items-center gap-2 transition"
         >
+
           <LogOut size={20} />
 
           Logout
+
         </button>
 
       </div>
 
     </aside>
+
   );
+
 }
+
 
 export default Sidebar;
