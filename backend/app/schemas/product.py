@@ -13,3 +13,12 @@ class ProductResponse(ProductCreate):
 
     class Config:
         from_attributes = True
+        
+class ProductListResponse(BaseModel):
+    items: list[ProductResponse]
+    total: int
+    page: int
+    limit: int
+
+    class Config:
+        from_attributes = True
