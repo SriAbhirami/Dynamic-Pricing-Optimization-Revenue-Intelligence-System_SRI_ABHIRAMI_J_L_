@@ -1,6 +1,12 @@
 import { useState } from "react";
 import API from "../../api/axios";
-import { X } from "lucide-react";
+import {
+  X,
+  PackagePlus,
+  Tag,
+  IndianRupee,
+  Boxes,
+} from "lucide-react";
 
 function AddProductModal({ isOpen, onClose, onProductAdded }) {
   const [formData, setFormData] = useState({
@@ -62,7 +68,6 @@ function AddProductModal({ isOpen, onClose, onProductAdded }) {
 
       onProductAdded();
       onClose();
-
     } catch (error) {
       console.error(error);
       alert("Failed to add product.");
@@ -72,73 +77,160 @@ function AddProductModal({ isOpen, onClose, onProductAdded }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md px-4">
 
-      <div className="bg-white rounded-3xl w-[460px] shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700/70 bg-slate-900 shadow-2xl shadow-black/50">
+
+        {/* Top Glow */}
+        <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-lime-300 to-emerald-500" />
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-5 flex justify-between items-center">
+        <div className="flex items-center justify-between border-b border-slate-700/70 px-7 py-6">
 
-          <h2 className="text-2xl font-bold text-white">
-            Add New Product
-          </h2>
+          <div className="flex items-center gap-4">
+
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10">
+              <PackagePlus
+                size={24}
+                className="text-emerald-400"
+              />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                Add New Product
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Add a product to your inventory
+              </p>
+            </div>
+
+          </div>
 
           <button
             onClick={onClose}
-            className="text-white hover:bg-white/20 p-2 rounded-lg transition"
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
           >
-            <X size={22} />
+            <X size={21} />
           </button>
 
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 px-7 py-7">
 
-          <input
-            name="name"
-            placeholder="Product Name"
-            value={formData.name}
-            onChange={handleChange}
-            className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+          {/* Product Name */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">
+              Product Name
+            </label>
 
-          <input
-            name="category"
-            placeholder="Category"
-            value={formData.category}
-            onChange={handleChange}
-            className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+            <div className="relative">
 
-          <input
-            name="current_price"
-            type="number"
-            min="0"
-            placeholder="Price (₹)"
-            value={formData.current_price}
-            onChange={handleChange}
-            className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+              <PackagePlus
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+              />
 
-          <input
-            name="stock"
-            type="number"
-            min="0"
-            placeholder="Stock Quantity"
-            value={formData.stock}
-            onChange={handleChange}
-            className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-          />
+              <input
+                name="name"
+                placeholder="Enter product name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-slate-700 bg-slate-800/70 py-3.5 pl-11 pr-4 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/10"
+              />
+
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">
+              Category
+            </label>
+
+            <div className="relative">
+
+              <Tag
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+              />
+
+              <input
+                name="category"
+                placeholder="Enter product category"
+                value={formData.category}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-slate-700 bg-slate-800/70 py-3.5 pl-11 pr-4 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/10"
+              />
+
+            </div>
+          </div>
+
+          {/* Price + Stock */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Current Price
+              </label>
+
+              <div className="relative">
+
+                <IndianRupee
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                />
+
+                <input
+                  name="current_price"
+                  type="number"
+                  min="0"
+                  placeholder="0.00"
+                  value={formData.current_price}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/70 py-3.5 pl-11 pr-4 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/10"
+                />
+
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Stock Quantity
+              </label>
+
+              <div className="relative">
+
+                <Boxes
+                  size={18}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                />
+
+                <input
+                  name="stock"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.stock}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800/70 py-3.5 pl-11 pr-4 text-white placeholder-slate-500 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/10"
+                />
+
+              </div>
+            </div>
+
+          </div>
 
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-5 border-t bg-slate-50">
+        <div className="flex justify-end gap-3 border-t border-slate-700/70 bg-slate-950/30 px-7 py-5">
 
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 transition"
+            className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
           >
             Cancel
           </button>
@@ -146,7 +238,7 @@ function AddProductModal({ isOpen, onClose, onProductAdded }) {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="px-5 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+            className="rounded-xl bg-emerald-400 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-400/10 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Adding..." : "Add Product"}
           </button>

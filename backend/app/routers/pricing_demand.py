@@ -175,27 +175,71 @@ def get_category_performance(
         query
         .with_entities(
             PricingDemand.category,
-            func.sum(PricingDemand.revenue).label("revenue"),
-            func.sum(PricingDemand.units_sold).label("units_sold"),
-            func.avg(PricingDemand.demand_index).label("demand_index"),
-            func.avg(PricingDemand.discount_pct).label("average_discount")
+
+            func.sum(
+                PricingDemand.revenue
+            ).label("revenue"),
+
+            func.sum(
+                PricingDemand.units_sold
+            ).label("units_sold"),
+
+            func.avg(
+                PricingDemand.demand_index
+            ).label("demand_index"),
+
+            func.avg(
+                PricingDemand.discount_pct
+            ).label("average_discount"),
+
+            # NEW:
+            # Average current selling price for the category
+            func.avg(
+                PricingDemand.current_price
+            ).label("average_current_price")
         )
-        .group_by(PricingDemand.category)
-        .order_by(func.sum(PricingDemand.revenue).desc())
+        .group_by(
+            PricingDemand.category
+        )
+        .order_by(
+            func.sum(
+                PricingDemand.revenue
+            ).desc()
+        )
         .all()
     )
 
     return [
         {
             "category": row.category,
-            "revenue": round(float(row.revenue or 0), 2),
-            "units_sold": int(row.units_sold or 0),
-            "demand_index": round(float(row.demand_index or 0), 2),
-            "average_discount": round(float(row.average_discount or 0), 2)
+
+            "revenue": round(
+                float(row.revenue or 0),
+                2
+            ),
+
+            "units_sold": int(
+                row.units_sold or 0
+            ),
+
+            "demand_index": round(
+                float(row.demand_index or 0),
+                2
+            ),
+
+            "average_discount": round(
+                float(row.average_discount or 0),
+                2
+            ),
+
+            # NEW:
+            "average_current_price": round(
+                float(row.average_current_price or 0),
+                2
+            )
         }
         for row in category_data
     ]
-    
 @router.get("/price-analysis")
 def get_price_analysis(
     category: str | None = None,
@@ -293,3 +337,118 @@ def get_inventory_analysis(
         }
         for row in inventory_data
     ]
+    
+@router.get("/products")
+def get_dataset_products(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    category: str | None = None,
+    brand: str | None = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(PricingDemand)
+
+    # Filters
+    if category:
+        query = query.filter(
+            PricingDemand.category == category
+        )
+
+    if brand:
+        query = query.filter(
+            PricingDemand.brand == brand
+        )
+
+    # Get total number of unique products
+    total = query.with_entities(
+        PricingDemand.product_id
+    ).distinct().count()
+
+    # Aggregate product-level information
+    product_data = (
+        query
+        .with_entities(
+            PricingDemand.product_id,
+            PricingDemand.category,
+            PricingDemand.brand,
+
+            func.avg(
+                PricingDemand.current_price
+            ).label("average_price"),
+
+            func.sum(
+                PricingDemand.units_sold
+            ).label("total_units_sold"),
+
+            func.sum(
+                PricingDemand.revenue
+            ).label("total_revenue"),
+
+            func.avg(
+                PricingDemand.demand_index
+            ).label("average_demand_index"),
+
+            func.avg(
+                PricingDemand.discount_pct
+            ).label("average_discount"),
+
+            func.avg(
+                PricingDemand.inventory_level
+            ).label("average_inventory"),
+
+            func.sum(
+                func.cast(
+                    PricingDemand.stockout_flag,
+                    Integer
+                )
+            ).label("stockout_count")
+        )
+        .group_by(
+            PricingDemand.product_id,
+            PricingDemand.category,
+            PricingDemand.brand
+        )
+        .order_by(
+            func.sum(
+                PricingDemand.revenue
+            ).desc()
+        )
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "product_id": row.product_id,
+                "category": row.category,
+                "brand": row.brand,
+                "average_price": round(
+                    float(row.average_price or 0), 2
+                ),
+                "total_units_sold": int(
+                    row.total_units_sold or 0
+                ),
+                "total_revenue": round(
+                    float(row.total_revenue or 0), 2
+                ),
+                "average_demand_index": round(
+                    float(row.average_demand_index or 0), 2
+                ),
+                "average_discount": round(
+                    float(row.average_discount or 0), 2
+                ),
+                "average_inventory": round(
+                    float(row.average_inventory or 0), 2
+                ),
+                "stockout_count": int(
+                    row.stockout_count or 0
+                )
+            }
+            for row in product_data
+        ],
+        "total": total,
+        "page": page,
+        "limit": limit
+    }

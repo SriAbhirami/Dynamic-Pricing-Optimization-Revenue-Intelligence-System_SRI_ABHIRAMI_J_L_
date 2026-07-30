@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GoogleLogin } from "@react-oauth/google";
 import API from "../api/axios";
 
-
 function Register() {
-
   const navigate = useNavigate();
-
 
   const [formData, setFormData] = useState({
     username: "",
@@ -15,182 +13,353 @@ function Register() {
     confirmPassword: ""
   });
 
-
   const handleChange = (e) => {
-
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
-
   };
 
+  // =========================
+  // Normal Registration
+  // =========================
 
   const handleRegister = async () => {
-
-    if (formData.password !== formData.confirmPassword) {
-
-      alert("Passwords do not match");
+    if (
+      !formData.username ||
+      !formData.email ||
+      !formData.password ||
+      !formData.confirmPassword
+    ) {
+      alert("Please fill in all fields.");
       return;
-
     }
 
+    if (formData.password !== formData.confirmPassword) {
+      alert("Passwords do not match");
+      return;
+    }
 
     try {
-
       await API.post("/users/register", {
-
         username: formData.username,
         email: formData.email,
         password: formData.password
-
       });
-
 
       alert("Account created successfully!");
 
-
       navigate("/");
-
-
     } catch (error) {
-
       alert(
         error.response?.data?.detail ||
-        "Registration failed"
+          "Registration failed"
       );
-
     }
-
   };
 
+  // =========================
+  // Google Registration
+  // =========================
+
+  const handleGoogleRegister = async (credentialResponse) => {
+    try {
+      const response = await API.post("/users/google-login", {
+        credential: credentialResponse.credential
+      });
+
+      const token = response.data.access_token;
+      const role = response.data.role;
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("role", role);
+
+      alert("Google account registered successfully!");
+
+      navigate("/dashboard");
+    } catch (error) {
+      alert(
+        error.response?.data?.detail ||
+          "Google registration failed"
+      );
+    }
+  };
 
   return (
+    <div className="register-page">
 
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-700 to-cyan-500 flex items-center justify-center">
+      {/* Background Effects */}
 
+      <div className="register-glow register-glow-one"></div>
 
-      <div className="bg-white/20 backdrop-blur-lg border border-white/30 p-10 rounded-3xl shadow-2xl w-full max-w-md">
-
-
-        <h1 className="text-5xl font-bold text-white text-center mb-3">
-          PricePilot AI
-        </h1>
+      <div className="register-glow register-glow-two"></div>
 
 
-        <p className="text-blue-100 text-center mb-8">
-          Create your AI pricing account
-        </p>
+      {/* Back Button */}
+
+      <button
+        className="register-back"
+        onClick={() => navigate("/")}
+      >
+        ← Back
+      </button>
 
 
+      <div className="register-wrapper">
 
-        <div className="space-y-5">
+        {/* Brand */}
 
+        <div className="register-brand">
 
-          <input
+          <div className="register-brand-icon">
+            ✦
+          </div>
 
-            name="username"
-            type="text"
-            placeholder="Full Name"
+          <h1>
+            PricePilot AI
+          </h1>
 
-            onChange={handleChange}
-
-            className="w-full px-5 py-3 rounded-xl bg-white/90 outline-none focus:ring-4 focus:ring-cyan-300"
-
-          />
-
-
-
-          <input
-
-            name="email"
-            type="email"
-            placeholder="Email address"
-
-            onChange={handleChange}
-
-            className="w-full px-5 py-3 rounded-xl bg-white/90 outline-none focus:ring-4 focus:ring-cyan-300"
-
-          />
-
-
-
-          <input
-
-            name="password"
-            type="password"
-            placeholder="Create Password"
-
-            onChange={handleChange}
-
-            className="w-full px-5 py-3 rounded-xl bg-white/90 outline-none focus:ring-4 focus:ring-cyan-300"
-
-          />
-
-
-
-          <input
-
-            name="confirmPassword"
-            type="password"
-            placeholder="Confirm Password"
-
-            onChange={handleChange}
-
-            className="w-full px-5 py-3 rounded-xl bg-white/90 outline-none focus:ring-4 focus:ring-cyan-300"
-
-          />
-
-
-
-          <button
-
-            onClick={handleRegister}
-
-            className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-xl transition duration-300 shadow-lg"
-
-          >
-
-            Register
-
-          </button>
-
-
+          <p>
+            Revenue Intelligence & Dynamic Pricing
+          </p>
 
         </div>
 
 
+        {/* Registration Card */}
 
-        <p className="text-center text-blue-100 mt-6">
+        <div className="register-card">
 
-          Already have an account?
+          <div className="register-card-header">
+
+            <span className="register-eyebrow">
+              CREATE ACCOUNT
+            </span>
+
+            <h2>
+              Welcome to PricePilot
+            </h2>
+
+            <p>
+              Create your account to access intelligent
+              pricing insights.
+            </p>
+
+          </div>
 
 
-          <span
+          {/* Analyst Badge */}
 
-            onClick={() => navigate("/")}
+          <div className="analyst-badge">
 
-            className="text-white font-semibold cursor-pointer ml-2 hover:underline"
+            <div className="analyst-badge-icon">
+              ◉
+            </div>
 
-          >
+            <div>
+              <span>
+                ACCOUNT TYPE
+              </span>
 
-            Login
+              <strong>
+                Analyst
+              </strong>
+            </div>
 
-          </span>
+          </div>
 
 
-        </p>
+          {/* Form */}
+
+          <div className="register-form">
+
+            {/* Full Name */}
+
+            <div className="register-field">
+
+              <label>
+                FULL NAME
+              </label>
+
+              <input
+                name="username"
+                type="text"
+                placeholder="Enter your full name"
+                value={formData.username}
+                onChange={handleChange}
+              />
+
+            </div>
 
 
+            {/* Email */}
+
+            <div className="register-field">
+
+              <label>
+                EMAIL ADDRESS
+              </label>
+
+              <input
+                name="email"
+                type="email"
+                placeholder="Enter your email address"
+                value={formData.email}
+                onChange={handleChange}
+              />
+
+            </div>
+
+
+            {/* Password */}
+
+            <div className="register-field">
+
+              <label>
+                PASSWORD
+              </label>
+
+              <input
+                name="password"
+                type="password"
+                placeholder="Create a password"
+                value={formData.password}
+                onChange={handleChange}
+              />
+
+            </div>
+
+
+            {/* Confirm Password */}
+
+            <div className="register-field">
+
+              <label>
+                CONFIRM PASSWORD
+              </label>
+
+              <input
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+              />
+
+            </div>
+
+
+            {/* Register Button */}
+
+            <button
+              className="register-button"
+              onClick={handleRegister}
+            >
+              <span>
+                Create Analyst Account
+              </span>
+
+              <span className="register-arrow">
+                →
+              </span>
+            </button>
+
+
+            {/* OR Divider */}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                margin: "20px 0"
+              }}
+            >
+
+              <div
+                style={{
+                  height: "1px",
+                  background: "rgba(255,255,255,0.1)",
+                  flex: 1
+                }}
+              />
+
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "#6b7280"
+                }}
+              >
+                OR
+              </span>
+
+              <div
+                style={{
+                  height: "1px",
+                  background: "rgba(255,255,255,0.1)",
+                  flex: 1
+                }}
+              />
+
+            </div>
+
+
+            {/* Google Registration */}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                width: "100%"
+              }}
+            >
+
+              <GoogleLogin
+                onSuccess={handleGoogleRegister}
+                onError={() => {
+                  alert("Google registration failed");
+                }}
+                theme="filled_black"
+                size="large"
+                text="signup_with"
+                shape="rectangular"
+                width="100%"
+              />
+
+            </div>
+
+          </div>
+
+
+          {/* Login Link */}
+
+          <div className="register-login">
+
+            <span>
+              Already have an account?
+            </span>
+
+            <button
+              onClick={() => navigate("/")}
+            >
+              Sign in
+            </button>
+
+          </div>
+
+        </div>
+
+
+        {/* Footer */}
+
+        <div className="register-footer">
+          SECURE ACCESS • PRICEPILOT AI
+        </div>
 
       </div>
 
-
     </div>
-
   );
-
 }
-
 
 export default Register;

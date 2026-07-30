@@ -13,13 +13,18 @@ from app.models.pricing_demand import PricingDemand
 from app.api.products import router as product_router
 from app.api.users import router as user_router
 from app.api.dashboard import router as dashboard_router
+from app.api.demand_forecasting import router as demand_forecasting_router
+from app.api import price_prediction
 from app.routers.pricing_demand import router as pricing_demand_router
+
+
 app = FastAPI(
     title="PricePilot AI API",
     description="Dynamic Pricing Optimization & Revenue Intelligence System",
     version="1.0.0"
 )
-app.include_router(pricing_demand_router)
+
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +35,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -46,3 +52,6 @@ def root():
 app.include_router(product_router)
 app.include_router(user_router)
 app.include_router(dashboard_router)
+app.include_router(pricing_demand_router)
+app.include_router(demand_forecasting_router)
+app.include_router(price_prediction.router)

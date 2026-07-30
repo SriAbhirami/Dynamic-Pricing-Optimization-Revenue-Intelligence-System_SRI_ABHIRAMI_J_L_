@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database.database import get_db
 from app.models.products import Product
+from app.models.pricing_demand import PricingDemand
 from app.schemas.product import (
     ProductCreate,
     ProductResponse,
     ProductListResponse,
 )
-from app.auth.oauth2 import get_current_user
+from app.auth.oauth2 import (
+    get_current_user,
+    require_admin,
+)
+
 
 router = APIRouter(
     prefix="/products",
@@ -16,16 +22,18 @@ router = APIRouter(
 )
 
 
-# =========================
-# Get Products
-# =========================
+# ============================================================
+# GET PRODUCTS
+# Accessible by: ADMIN + ANALYST
+# ============================================================
+
 @router.get("/", response_model=ProductListResponse)
 def get_products(
     current_user=Depends(get_current_user),
     name: str | None = None,
     category: str | None = None,
     min_price: float | None = None,
-    max_price: float |None = None,
+    max_price: float | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     sort_by: str | None = None,
@@ -131,13 +139,78 @@ def get_products(
     }
 
 
-# =========================
-# Create Product
-# =========================
+# ============================================================
+# DATASET PRODUCT CATALOG
+# Accessible by: ADMIN + ANALYST
+# ============================================================
+
+@router.get("/catalog")
+def get_product_catalog(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+
+    products = (
+        db.query(
+            PricingDemand.product_id,
+            PricingDemand.category,
+            PricingDemand.brand,
+            func.avg(
+                PricingDemand.current_price
+            ).label("average_price"),
+            func.avg(
+                PricingDemand.inventory_level
+            ).label("average_inventory"),
+            func.sum(
+                PricingDemand.units_sold
+            ).label("total_units_sold"),
+            func.avg(
+                PricingDemand.demand_index
+            ).label("average_demand_index"),
+        )
+        .group_by(
+            PricingDemand.product_id,
+            PricingDemand.category,
+            PricingDemand.brand,
+        )
+        .order_by(PricingDemand.product_id)
+        .all()
+    )
+
+    return [
+        {
+            "product_id": row.product_id,
+            "category": row.category,
+            "brand": row.brand,
+            "average_price": round(
+                float(row.average_price or 0),
+                2,
+            ),
+            "average_inventory": round(
+                float(row.average_inventory or 0),
+                2,
+            ),
+            "total_units_sold": int(
+                row.total_units_sold or 0
+            ),
+            "average_demand_index": round(
+                float(row.average_demand_index or 0),
+                2,
+            ),
+        }
+        for row in products
+    ]
+
+
+# ============================================================
+# CREATE PRODUCT
+# Accessible by: ADMIN ONLY
+# ============================================================
+
 @router.post("/", response_model=ProductResponse)
 def create_product(
     product: ProductCreate,
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
 
@@ -155,14 +228,16 @@ def create_product(
     return new_product
 
 
-# =========================
-# Update Product
-# =========================
+# ============================================================
+# UPDATE PRODUCT
+# Accessible by: ADMIN ONLY
+# ============================================================
+
 @router.put("/{product_id}", response_model=ProductResponse)
 def update_product(
     product_id: int,
     updated_product: ProductCreate,
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
 
@@ -189,13 +264,15 @@ def update_product(
     return product
 
 
-# =========================
-# Delete Product
-# =========================
+# ============================================================
+# DELETE PRODUCT
+# Accessible by: ADMIN ONLY
+# ============================================================
+
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
 
