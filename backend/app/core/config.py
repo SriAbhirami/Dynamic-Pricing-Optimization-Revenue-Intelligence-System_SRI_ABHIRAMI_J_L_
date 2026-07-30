@@ -1,0 +1,1 @@
+GOOGLE_CLIENT_ID = "682227288742-cuiqe6i35eg6ql0be76p7php3m1241d6.apps.googleusercontent.com"

@@ -38,3 +38,30 @@ export const getPricingDemandData = async (skip = 0, limit = 20) => {
 
   return response.data;
 };
+
+// Dataset-backed products
+export const getDatasetProducts = async (
+  page = 1,
+  limit = 20,
+  category = "",
+  brand = ""
+) => {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+
+  if (category) {
+    params.append("category", category);
+  }
+
+  if (brand) {
+    params.append("brand", brand);
+  }
+
+  const response = await API.get(
+    `/pricing-demand/products?${params.toString()}`
+  );
+
+  return response.data;
+};
