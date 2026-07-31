@@ -69,7 +69,10 @@ print(f"Dataset shape: {df.shape}")
 # Date Processing
 # ============================================================
 
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df["date"] = pd.to_datetime(
+    df["date"],
+    errors="coerce",
+)
 
 df["year"] = df["date"].dt.year
 df["month"] = df["date"].dt.month
@@ -80,21 +83,40 @@ df["day_of_week"] = df["date"].dt.dayofweek
 # ============================================================
 # Target
 # ============================================================
+#
+# IMPORTANT:
+#
+# We are NOT predicting an absolute price anymore.
+#
+# The model predicts how much the price should change
+# relative to the current/base pricing situation.
+#
+# Example:
+#
+# Current Price = ₹150,000
+# Predicted Change = +4%
+#
+# Recommended Price =
+# ₹150,000 * (1 + 4 / 100)
+#
+# ============================================================
 
-TARGET = "current_price"
+TARGET = "price_change_pct"
 
 
 # ============================================================
 # Features
+# ============================================================
 #
 # We intentionally DO NOT use:
 #
-# - current_price  -> target
-# - price_change_pct
-# - discount_pct
-# - revenue
+# - current_price       -> actual product price comes from
+#                          our Product table
 #
-# These can introduce direct pricing leakage.
+# - price_change_pct    -> this is our target
+#
+# - revenue             -> derived from pricing and sales
+#
 # ============================================================
 
 FEATURES = [
@@ -118,21 +140,67 @@ FEATURES = [
 
 
 X = df[FEATURES].copy()
+
 y = df[TARGET].copy()
 
 
 # ============================================================
-# Remove Invalid Target Rows
+# Remove Invalid Rows
 # ============================================================
 
-valid_rows = y.notna()
+valid_rows = (
+    y.notna()
+    & df["base_price"].notna()
+    & df["units_sold"].notna()
+    & df["inventory_level"].notna()
+    & df["demand_index"].notna()
+)
 
 X = X.loc[valid_rows].copy()
+
 y = y.loc[valid_rows].copy()
 
 
-print(f"Rows used for training: {len(X)}")
-print(f"Target: {TARGET}")
+# ============================================================
+# Remove Extreme / Invalid Price Change Values
+# ============================================================
+#
+# This protects the model from extreme outliers that could
+# produce unrealistic recommendations.
+#
+# We keep changes between -50% and +50%.
+#
+# ============================================================
+
+reasonable_rows = (
+    (y >= -50)
+    & (y <= 50)
+)
+
+X = X.loc[reasonable_rows].copy()
+
+y = y.loc[reasonable_rows].copy()
+
+
+print(
+    f"\nRows used for training: {len(X)}"
+)
+
+print(
+    f"Target: {TARGET}"
+)
+
+print(
+    f"Target mean: {y.mean():.4f}%"
+)
+
+print(
+    f"Target min : {y.min():.4f}%"
+)
+
+print(
+    f"Target max : {y.max():.4f}%"
+)
 
 
 # ============================================================
@@ -170,7 +238,9 @@ numeric_transformer = Pipeline(
     steps=[
         (
             "imputer",
-            SimpleImputer(strategy="median"),
+            SimpleImputer(
+                strategy="median"
+            ),
         )
     ]
 )
@@ -180,7 +250,9 @@ categorical_transformer = Pipeline(
     steps=[
         (
             "imputer",
-            SimpleImputer(strategy="most_frequent"),
+            SimpleImputer(
+                strategy="most_frequent"
+            ),
         ),
         (
             "onehot",
@@ -221,8 +293,15 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 
-print("\nTraining data:", X_train.shape)
-print("Testing data :", X_test.shape)
+print(
+    "\nTraining data:",
+    X_train.shape,
+)
+
+print(
+    "Testing data :",
+    X_test.shape,
+)
 
 
 # ============================================================
@@ -245,10 +324,17 @@ model = XGBRegressor(
 # Transform Data
 # ============================================================
 
-print("\nPreprocessing data...")
+print(
+    "\nPreprocessing data..."
+)
 
-X_train_processed = preprocessor.fit_transform(X_train)
-X_test_processed = preprocessor.transform(X_test)
+X_train_processed = (
+    preprocessor.fit_transform(X_train)
+)
+
+X_test_processed = (
+    preprocessor.transform(X_test)
+)
 
 
 print(
@@ -266,7 +352,9 @@ print(
 # Train Model
 # ============================================================
 
-print("\nTraining XGBoost Price Prediction Model...")
+print(
+    "\nTraining XGBoost Price Adjustment Model..."
+)
 
 model.fit(
     X_train_processed,
@@ -278,9 +366,32 @@ model.fit(
 # Predictions
 # ============================================================
 
-print("\nGenerating predictions...")
+print(
+    "\nGenerating predictions..."
+)
 
-predictions = model.predict(X_test_processed)
+predictions = model.predict(
+    X_test_processed
+)
+
+
+# ============================================================
+# Safety Clipping
+# ============================================================
+#
+# The model is trained on -50% to +50%.
+#
+# We additionally keep predictions inside the same
+# business-safe range.
+#
+# ============================================================
+
+predictions = pd.Series(
+    predictions
+).clip(
+    lower=-50,
+    upper=50,
+).values
 
 
 # ============================================================
@@ -309,15 +420,33 @@ r2 = r2_score(
 # Results
 # ============================================================
 
-print("\n" + "=" * 60)
-print("PRICE PREDICTION MODEL RESULTS")
-print("=" * 60)
+print(
+    "\n" + "=" * 60
+)
 
-print(f"MAE  : {mae:.4f}")
-print(f"RMSE : {rmse:.4f}")
-print(f"R²   : {r2:.4f}")
+print(
+    "PRICE ADJUSTMENT MODEL RESULTS"
+)
 
-print("=" * 60)
+print(
+    "=" * 60
+)
+
+print(
+    f"MAE  : {mae:.4f}%"
+)
+
+print(
+    f"RMSE : {rmse:.4f}%"
+)
+
+print(
+    f"R²   : {r2:.4f}"
+)
+
+print(
+    "=" * 60
+)
 
 
 # ============================================================
@@ -326,17 +455,21 @@ print("=" * 60)
 
 results = pd.DataFrame(
     {
-        "Actual Price": y_test.values,
-        "Predicted Price": predictions,
+        "Actual Change %": y_test.values,
+        "Predicted Change %": predictions,
     }
 )
 
 results["Difference"] = (
-    results["Predicted Price"]
-    - results["Actual Price"]
+    results["Predicted Change %"]
+    - results["Actual Change %"]
 )
 
-print("\nSample Predictions:")
+
+print(
+    "\nSample Predictions:"
+)
+
 print(
     results.head(10).to_string(
         index=False
@@ -348,7 +481,9 @@ print(
 # Save Model
 # ============================================================
 
-print("\nSaving model...")
+print(
+    "\nSaving model..."
+)
 
 joblib.dump(
     model,
@@ -361,10 +496,12 @@ joblib.dump(
 )
 
 
-print("\nModel saved successfully!")
+print(
+    "\nModel saved successfully!"
+)
 
 print(
-    f"Model      : {MODEL_PATH}"
+    f"Model       : {MODEL_PATH}"
 )
 
 print(
@@ -376,14 +513,45 @@ print(
 # Final Summary
 # ============================================================
 
-print("\n" + "=" * 60)
-print("PRICE PREDICTION TRAINING COMPLETE")
-print("=" * 60)
+print(
+    "\n" + "=" * 60
+)
 
-print("Target              :", TARGET)
-print("Training rows       :", len(X_train))
-print("Testing rows        :", len(X_test))
-print(f"MAE                 : {mae:.4f}")
-print(f"RMSE                : {rmse:.4f}")
-print(f"R²                  : {r2:.4f}")
-print("=" * 60)
+print(
+    "PRICE ADJUSTMENT TRAINING COMPLETE"
+)
+
+print(
+    "=" * 60
+)
+
+print(
+    "Target              :",
+    TARGET,
+)
+
+print(
+    "Training rows       :",
+    len(X_train),
+)
+
+print(
+    "Testing rows        :",
+    len(X_test),
+)
+
+print(
+    f"MAE                 : {mae:.4f}%"
+)
+
+print(
+    f"RMSE                : {rmse:.4f}%"
+)
+
+print(
+    f"R²                  : {r2:.4f}"
+)
+
+print(
+    "=" * 60
+)

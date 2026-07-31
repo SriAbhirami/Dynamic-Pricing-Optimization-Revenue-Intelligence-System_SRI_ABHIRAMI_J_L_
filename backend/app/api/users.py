@@ -18,6 +18,8 @@ from app.auth.hashing import (
 
 from app.auth.jwt_handler import create_access_token
 
+from app.auth.dependencies import require_admin
+
 from app.database.database import get_db
 from app.models.users import User
 
@@ -34,9 +36,9 @@ router = APIRouter(
 )
 
 
-# =========================
-# Register User
-# =========================
+# =========================================================
+# REGISTER USER
+# =========================================================
 
 @router.post(
     "/register",
@@ -76,9 +78,9 @@ def register_user(
     return new_user
 
 
-# =========================
-# Login User
-# =========================
+# =========================================================
+# LOGIN USER
+# =========================================================
 
 @router.post(
     "/login",
@@ -136,9 +138,9 @@ def login_user(
             detail="Invalid role selected."
         )
 
-    # =========================
+    # =====================================================
     # ROLE CHECK
-    # =========================
+    # =====================================================
 
     if actual_role != requested_role:
 
@@ -162,9 +164,9 @@ def login_user(
                 )
             )
 
-    # =========================
+    # =====================================================
     # CREATE JWT
-    # =========================
+    # =====================================================
 
     token = create_access_token(
         {
@@ -180,9 +182,9 @@ def login_user(
     }
 
 
-# =========================
-# Google Login / Registration
-# =========================
+# =========================================================
+# GOOGLE LOGIN / REGISTRATION
+# =========================================================
 
 @router.post(
     "/google",
@@ -193,9 +195,9 @@ def google_login(
     db: Session = Depends(get_db)
 ):
 
-    # =========================
-    # Verify Google Credential
-    # =========================
+    # =====================================================
+    # VERIFY GOOGLE CREDENTIAL
+    # =====================================================
 
     try:
 
@@ -212,9 +214,9 @@ def google_login(
             detail="Invalid Google credential"
         )
 
-    # =========================
-    # Extract Google Information
-    # =========================
+    # =====================================================
+    # EXTRACT GOOGLE INFORMATION
+    # =====================================================
 
     google_email = google_user.get("email")
     google_name = google_user.get("name")
@@ -228,9 +230,9 @@ def google_login(
     if not google_name:
         google_name = google_email.split("@")[0]
 
-    # =========================
-    # Check Existing User
-    # =========================
+    # =====================================================
+    # CHECK EXISTING USER
+    # =====================================================
 
     existing_user = (
         db.query(User)
@@ -238,9 +240,9 @@ def google_login(
         .first()
     )
 
-    # =========================
-    # Existing User
-    # =========================
+    # =====================================================
+    # EXISTING USER
+    # =====================================================
 
     if existing_user:
 
@@ -278,9 +280,9 @@ def google_login(
             "role": existing_user.role
         }
 
-    # =========================
-    # Create New Google Analyst
-    # =========================
+    # =====================================================
+    # CREATE NEW GOOGLE ANALYST
+    # =====================================================
 
     new_user = User(
         username=google_name,
@@ -294,9 +296,9 @@ def google_login(
     db.commit()
     db.refresh(new_user)
 
-    # =========================
-    # Create JWT
-    # =========================
+    # =====================================================
+    # CREATE JWT
+    # =====================================================
 
     token = create_access_token(
         {
@@ -309,4 +311,157 @@ def google_login(
         "access_token": token,
         "token_type": "bearer",
         "role": new_user.role
+    }
+
+
+# =========================================================
+# ADMIN — GET ALL USERS
+# =========================================================
+
+@router.get(
+    "/",
+    response_model=list[UserResponse]
+)
+def get_all_users(
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin)
+):
+
+    users = (
+        db.query(User)
+        .order_by(User.id.asc())
+        .all()
+    )
+
+    return users
+
+
+# =========================================================
+# ADMIN — CHANGE USER ROLE
+# =========================================================
+
+@router.put(
+    "/{user_id}/role",
+    response_model=UserResponse
+)
+def update_user_role(
+    user_id: int,
+    role_data: dict,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin)
+):
+
+    # =====================================================
+    # VALIDATE ROLE
+    # =====================================================
+
+    new_role = role_data.get("role")
+
+    if not new_role:
+        raise HTTPException(
+            status_code=400,
+            detail="Role is required."
+        )
+
+    new_role = new_role.lower().strip()
+
+    if new_role not in ["admin", "analyst"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Role must be either 'admin' or 'analyst'."
+        )
+
+    # =====================================================
+    # FIND USER
+    # =====================================================
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # =====================================================
+    # IDENTIFY CURRENT ADMIN
+    # =====================================================
+
+    current_admin_email = admin.get("sub")
+
+    # Prevent admin from changing their own role
+    if user.email == current_admin_email:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot change your own role."
+        )
+
+    # =====================================================
+    # UPDATE ROLE
+    # =====================================================
+
+    user.role = new_role
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+# =========================================================
+# ADMIN — DELETE USER
+# =========================================================
+
+@router.delete(
+    "/{user_id}"
+)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin)
+):
+
+    # =====================================================
+    # FIND USER
+    # =====================================================
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # =====================================================
+    # IDENTIFY CURRENT ADMIN
+    # =====================================================
+
+    current_admin_email = admin.get("sub")
+
+    # Prevent admin from deleting themselves
+    if user.email == current_admin_email:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own account."
+        )
+
+    # =====================================================
+    # DELETE USER
+    # =====================================================
+
+    db.delete(user)
+    db.commit()
+
+    return {
+        "message": "User deleted successfully.",
+        "user_id": user_id
     }

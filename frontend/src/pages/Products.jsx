@@ -1,1033 +1,1365 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
-  Package,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
-  DollarSign,
-  Boxes,
-  AlertTriangle,
-  Database,
-  Activity,
-} from "lucide-react";
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from "recharts";
 
-import Sidebar from "../components/layout/Sidebar";
-import Navbar from "../components/layout/Navbar";
+import API from "../api/axios";
 
-import { getDatasetProducts } from "../api/dashboard";
+function PricingAnalytics() {
+  const [summary, setSummary] = useState(null);
 
+  const [trendData, setTrendData] = useState([]);
+  const [categoryData, setCategoryData] = useState([]);
 
-function Products() {
-
-  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-
-  const limit = 20;
-
-
-  // =========================
-  // LOAD DATASET PRODUCTS
-  // =========================
-
-  const loadProducts = async () => {
-
-    try {
-
-      setLoading(true);
-
-      const response = await getDatasetProducts(
-        page,
-        limit,
-        category
-      );
-
-      setProducts(response.items || []);
-      setTotal(response.total || 0);
-
-    } catch (error) {
-
-      console.error(
-        "Error loading dataset products:",
-        error
-      );
-
-      setProducts([]);
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  };
-
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    fetchAnalytics();
+  }, []);
 
-    loadProducts();
+  // =========================================================
+  // FETCH ANALYTICS DATA
+  // =========================================================
 
-  }, [page, category]);
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      setError("");
 
+      const results = await Promise.allSettled([
+        API.get("/pricing-demand/summary"),
+        API.get("/pricing-demand/trends"),
+        API.get("/pricing-demand/category-performance"),
+      ]);
 
-  // =========================
-  // SEARCH
-  // =========================
+      // -------------------------------------------------------
+      // SUMMARY
+      // -------------------------------------------------------
 
-  const filteredProducts = products.filter((product) => {
+      const summaryResult = results[0];
 
-    const searchText = search.toLowerCase().trim();
+      if (summaryResult.status === "fulfilled") {
+        setSummary(summaryResult.value.data);
+      }
 
-    if (!searchText) {
-      return true;
+      // -------------------------------------------------------
+      // TRENDS
+      // -------------------------------------------------------
+
+      const trendsResult = results[1];
+
+      if (trendsResult.status === "fulfilled") {
+        const responseData = trendsResult.value.data;
+
+        const trends = Array.isArray(responseData)
+          ? responseData
+          : responseData?.data ||
+            responseData?.trends ||
+            responseData?.items ||
+            [];
+
+        setTrendData(Array.isArray(trends) ? trends : []);
+      }
+
+      // -------------------------------------------------------
+      // CATEGORY PERFORMANCE
+      // -------------------------------------------------------
+
+      const categoryResult = results[2];
+
+      if (categoryResult.status === "fulfilled") {
+        const responseData = categoryResult.value.data;
+
+        const categories = Array.isArray(responseData)
+          ? responseData
+          : responseData?.data ||
+            responseData?.categories ||
+            responseData?.items ||
+            [];
+
+        setCategoryData(
+          Array.isArray(categories) ? categories : []
+        );
+      }
+
+      // -------------------------------------------------------
+      // ERROR HANDLING
+      // -------------------------------------------------------
+
+      const failedRequests = results.filter(
+        (result) => result.status === "rejected"
+      );
+
+      if (failedRequests.length === results.length) {
+        const firstError = failedRequests[0]?.reason;
+
+        if (firstError?.response?.status === 401) {
+          setError(
+            "Your session has expired. Please login again."
+          );
+        } else {
+          setError(
+            "Unable to load analytics data. Please check your backend and login session."
+          );
+        }
+      } else if (failedRequests.length > 0) {
+        console.warn(
+          "Some analytics endpoints failed:",
+          failedRequests
+        );
+      }
+    } catch (err) {
+      console.error("Analytics loading error:", err);
+
+      if (err.response?.status === 401) {
+        setError(
+          "Your session has expired. Please login again."
+        );
+      } else {
+        setError(
+          "Unable to load analytics data. Please check your backend connection."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================================================
+  // FORMAT TREND DATA
+  // =========================================================
+
+  const formattedTrendData = useMemo(() => {
+    return trendData
+      .map((item) => ({
+        date:
+          item.date ||
+          item.day ||
+          item.created_at ||
+          item.month ||
+          "Unknown",
+
+        revenue: Number(
+          item.revenue ||
+            item.total_revenue ||
+            0
+        ),
+
+        units_sold: Number(
+          item.units_sold ||
+            item.total_units_sold ||
+            item.unitsSold ||
+            0
+        ),
+
+        demand_index: Number(
+          item.demand_index ||
+            item.average_demand_index ||
+            item.avg_demand_index ||
+            item.demandIndex ||
+            0
+        ),
+      }))
+      .filter(
+        (item) =>
+          item.revenue > 0 ||
+          item.units_sold > 0 ||
+          item.demand_index > 0
+      );
+  }, [trendData]);
+
+  // =========================================================
+  // FORMAT CATEGORY DATA
+  // =========================================================
+
+  const formattedCategoryData = useMemo(() => {
+    return categoryData
+      .map((item) => ({
+        category:
+          item.category ||
+          item.name ||
+          "Unknown",
+
+        revenue: Number(
+          item.revenue ||
+            item.total_revenue ||
+            0
+        ),
+
+        units_sold: Number(
+          item.units_sold ||
+            item.total_units_sold ||
+            0
+        ),
+
+        demand_index: Number(
+          item.demand_index ||
+            item.average_demand_index ||
+            item.avg_demand_index ||
+            0
+        ),
+      }))
+      .filter(
+        (item) =>
+          item.revenue > 0 ||
+          item.units_sold > 0 ||
+          item.demand_index > 0
+      );
+  }, [categoryData]);
+
+  // =========================================================
+  // CURRENCY FORMATTER
+  // =========================================================
+
+  const formatCurrency = (value) => {
+    return `₹${Number(
+      value || 0
+    ).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    })}`;
+  };
+
+  // =========================================================
+  // NUMBER FORMATTER
+  // =========================================================
+
+  const formatNumber = (value) => {
+    return Number(
+      value || 0
+    ).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  };
+
+  // =========================================================
+  // REVENUE TOOLTIP
+  // =========================================================
+
+  const RevenueTooltip = ({
+    active,
+    payload,
+    label,
+  }) => {
+    if (
+      !active ||
+      !payload ||
+      !payload.length
+    ) {
+      return null;
     }
 
     return (
-      product.product_id
-        ?.toLowerCase()
-        .includes(searchText) ||
+      <div style={tooltipStyle}>
+        <p style={tooltipLabelStyle}>
+          {label}
+        </p>
 
-      product.category
-        ?.toLowerCase()
-        .includes(searchText)
+        {payload.map(
+          (entry, index) => (
+            <p
+              key={index}
+              style={{
+                margin: "4px 0",
+                color: "#86efac",
+              }}
+            >
+              {entry.name}:{" "}
+              {entry.name === "Revenue"
+                ? formatCurrency(
+                    entry.value
+                  )
+                : formatNumber(
+                    entry.value
+                  )}
+            </p>
+          )
+        )}
+      </div>
     );
-
-  });
-
-
-  // =========================
-  // PAGINATION
-  // =========================
-
-  const totalPages = Math.ceil(total / limit);
-
-
-  const handlePrevious = () => {
-
-    if (page > 1) {
-      setPage(page - 1);
-    }
-
   };
 
+  // =========================================================
+  // DEMAND TOOLTIP
+  // =========================================================
 
-  const handleNext = () => {
-
-    if (page < totalPages) {
-      setPage(page + 1);
+  const DemandTooltip = ({
+    active,
+    payload,
+    label,
+  }) => {
+    if (
+      !active ||
+      !payload ||
+      !payload.length
+    ) {
+      return null;
     }
 
+    return (
+      <div style={tooltipStyle}>
+        <p style={tooltipLabelStyle}>
+          {label}
+        </p>
+
+        <p
+          style={{
+            margin: "4px 0",
+            color: "#60a5fa",
+          }}
+        >
+          Demand Index:{" "}
+          {Number(
+            payload[0]?.value || 0
+          ).toFixed(2)}
+        </p>
+      </div>
+    );
   };
 
+  // =========================================================
+  // CATEGORY TOOLTIP
+  // =========================================================
+
+  const CategoryTooltip = ({
+    active,
+    payload,
+    label,
+  }) => {
+    if (
+      !active ||
+      !payload ||
+      !payload.length
+    ) {
+      return null;
+    }
+
+    return (
+      <div style={tooltipStyle}>
+        <p style={tooltipLabelStyle}>
+          {label}
+        </p>
+
+        {payload.map(
+          (entry, index) => (
+            <p
+              key={index}
+              style={{
+                margin: "4px 0",
+                color:
+                  entry.dataKey ===
+                  "revenue"
+                    ? "#86efac"
+                    : "#60a5fa",
+              }}
+            >
+              {entry.name}:{" "}
+              {entry.dataKey ===
+              "revenue"
+                ? formatCurrency(
+                    entry.value
+                  )
+                : formatNumber(
+                    entry.value
+                  )}
+            </p>
+          )
+        )}
+      </div>
+    );
+  };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background:
+            "radial-gradient(circle at top, #10251c 0%, #0b1120 38%, #060b14 100%)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "18px",
+          fontFamily:
+            "Inter, system-ui, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            color: "#86efac",
+            textShadow:
+              "0 0 10px rgba(134,239,172,0.8), 0 0 25px rgba(34,197,94,0.5)",
+          }}
+        >
+          Loading pricing analytics...
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // MAIN PAGE
+  // =========================================================
 
   return (
-
-    <div className="min-h-screen bg-[#050807] text-white">
-
-      {/* =========================
-          SIDEBAR
-      ========================= */}
-
-      <Sidebar />
-
-
-      {/* =========================
-          MAIN APPLICATION AREA
-      ========================= */}
-
-      <div className="lg:ml-64 min-h-screen">
-
-        {/* Navbar remains in normal flow */}
-
-        <Navbar />
-
-
-        <main className="p-6 lg:p-8">
-
-
-          {/* =========================
-              PAGE HEADER
-          ========================= */}
-
-          <section className="relative overflow-hidden rounded-3xl border border-lime-400/20 bg-[#09100c] p-7 lg:p-8">
-
-            {/* Background glow */}
-
-            <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-lime-400/10 blur-[100px]" />
-
-            <div className="absolute -bottom-32 left-20 h-64 w-64 rounded-full bg-emerald-400/10 blur-[100px]" />
-
-
-            <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-
-              <div>
-
-                <div className="mb-4 flex items-center gap-2">
-
-                  <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_12px_rgba(163,230,53,0.8)]" />
-
-                  <span className="text-xs font-semibold uppercase tracking-[0.25em] text-lime-300">
-
-                    Dataset Intelligence
-
-                  </span>
-
-                </div>
-
-
-                <div className="flex items-center gap-3">
-
-                  <Package className="h-8 w-8 text-lime-300" />
-
-                  <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">
-
-                    Product Intelligence
-
-                  </h1>
-
-                </div>
-
-
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-
-                  Explore pricing, demand, inventory and sales signals
-                  extracted from the connected retail intelligence dataset.
-
-                </p>
-
-              </div>
-
-
-              {/* Dataset status */}
-
-              <div className="flex items-center gap-3 rounded-2xl border border-lime-400/20 bg-lime-400/5 px-5 py-4">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                  <Database className="h-5 w-5 text-lime-300" />
-
-                </div>
-
-
-                <div>
-
-                  <p className="text-xs uppercase tracking-wider text-gray-500">
-
-                    Data Source
-
-                  </p>
-
-                  <p className="mt-1 font-semibold text-lime-300">
-
-                    Dataset Connected
-
-                  </p>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </section>
-
-
-
-          {/* =========================
-              SUMMARY SIGNALS
-          ========================= */}
-
-          <section className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
-
-
-            {/* Product Coverage */}
-
-            <div className="rounded-2xl border border-lime-400/15 bg-[#0b110e] p-5">
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-400/10">
-
-                  <Package className="h-5 w-5 text-lime-300" />
-
-                </div>
-
-                <span className="text-xs uppercase tracking-wider text-gray-600">
-
-                  Coverage
-
-                </span>
-
-              </div>
-
-
-              <p className="mt-5 text-sm text-gray-500">
-
-                Dataset Products
-
-              </p>
-
-
-              <p className="mt-1 text-3xl font-bold">
-
-                {total.toLocaleString("en-US")}
-
-              </p>
-
-            </div>
-
-
-
-            {/* Dataset Status */}
-
-            <div className="rounded-2xl border border-lime-400/15 bg-[#0b110e] p-5">
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10">
-
-                  <Activity className="h-5 w-5 text-emerald-300" />
-
-                </div>
-
-                <span className="text-xs uppercase tracking-wider text-gray-600">
-
-                  Status
-
-                </span>
-
-              </div>
-
-
-              <p className="mt-5 text-sm text-gray-500">
-
-                Intelligence Layer
-
-              </p>
-
-
-              <p className="mt-1 text-xl font-bold text-emerald-300">
-
-                Connected
-
-              </p>
-
-            </div>
-
-
-
-            {/* Current Page */}
-
-            <div className="rounded-2xl border border-lime-400/15 bg-[#0b110e] p-5">
-
-              <div className="flex items-center justify-between">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-400/10">
-
-                  <TrendingUp className="h-5 w-5 text-yellow-300" />
-
-                </div>
-
-                <span className="text-xs uppercase tracking-wider text-gray-600">
-
-                  View
-
-                </span>
-
-              </div>
-
-
-              <p className="mt-5 text-sm text-gray-500">
-
-                Current Dataset Page
-
-              </p>
-
-
-              <p className="mt-1 text-3xl font-bold">
-
-                {page}
-
-                <span className="ml-2 text-base font-normal text-gray-500">
-
-                  / {totalPages || 1}
-
-                </span>
-
-              </p>
-
-            </div>
-
-          </section>
-
-
-
-          {/* =========================
-              FILTER BAR
-          ========================= */}
-
-          <section className="mt-6 rounded-2xl border border-lime-400/15 bg-[#0b110e] p-5">
-
-
-            <div className="mb-4 flex items-center gap-2">
-
-              <Search className="h-5 w-5 text-lime-300" />
-
-              <h2 className="font-semibold">
-
-                Explore Dataset
-
-              </h2>
-
-            </div>
-
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-
-              {/* Search */}
-
-              <div className="relative">
-
-                <Search
-                  size={19}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600"
-                />
-
-
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search product or category..."
-                  className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-sm text-white placeholder-gray-600 outline-none transition focus:border-lime-400/40 focus:ring-1 focus:ring-lime-400/20"
-                />
-
-              </div>
-
-
-
-              {/* Category */}
-
-              <select
-                value={category}
-                onChange={(e) => {
-
-                  setCategory(e.target.value);
-
-                  setPage(1);
-
+    <div
+      style={{
+        minHeight: "100vh",
+
+        background:
+          "radial-gradient(circle at 50% -10%, #123523 0%, #0b1120 32%, #060b14 75%, #03070d 100%)",
+
+        color: "#fff",
+
+        padding: "28px",
+
+        fontFamily:
+          "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+
+        boxSizing: "border-box",
+
+        position: "relative",
+
+        overflow: "hidden",
+      }}
+    >
+      {/* =====================================================
+          BACKGROUND GLOW
+      ====================================================== */}
+
+      <div
+        style={{
+          position: "fixed",
+          top: "-180px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "700px",
+          height: "400px",
+          background:
+            "radial-gradient(circle, rgba(34,197,94,0.16) 0%, rgba(34,197,94,0.06) 35%, transparent 70%)",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
+
+      {/* =====================================================
+          CONTENT WRAPPER
+      ====================================================== */}
+
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {/* ===================================================
+            HEADER
+        ==================================================== */}
+
+        <div
+          style={{
+            marginBottom: "28px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "20px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  margin: "0 0 6px",
+                  color: "#86efac",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  textTransform:
+                    "uppercase",
+                  letterSpacing:
+                    "0.2em",
+
+                  textShadow:
+                    "0 0 8px rgba(134,239,172,0.85), 0 0 18px rgba(34,197,94,0.55)",
                 }}
-                className="rounded-xl border border-white/10 bg-[#080d0a] px-4 py-3 text-sm text-gray-300 outline-none transition focus:border-lime-400/40 focus:ring-1 focus:ring-lime-400/20"
               >
-
-                <option value="" className="bg-[#080d0a]">
-
-                  All Categories
-
-                </option>
-
-                <option value="Electronics" className="bg-[#080d0a]">
-                  Electronics
-                </option>
-
-                <option value="Apparel" className="bg-[#080d0a]">
-                  Apparel
-                </option>
-
-                <option value="Shoes" className="bg-[#080d0a]">
-                  Shoes
-                </option>
-
-                <option value="Accessories" className="bg-[#080d0a]">
-                  Accessories
-                </option>
-
-                <option value="Beauty" className="bg-[#080d0a]">
-                  Beauty
-                </option>
-
-                <option value="Groceries" className="bg-[#080d0a]">
-                  Groceries
-                </option>
-
-                <option value="Home" className="bg-[#080d0a]">
-                  Home
-                </option>
-
-              </select>
-
-            </div>
-
-          </section>
-
-
-
-          {/* =========================
-              PRODUCT INTELLIGENCE TABLE
-          ========================= */}
-
-          <section className="mt-6 overflow-hidden rounded-3xl border border-lime-400/15 bg-[#0b110e]">
-
-
-            {/* Table Header */}
-
-            <div className="flex flex-col gap-3 border-b border-white/5 px-6 py-5 md:flex-row md:items-center md:justify-between">
-
-              <div>
-
-                <div className="flex items-center gap-2">
-
-                  <Package className="h-5 w-5 text-lime-300" />
-
-                  <h2 className="text-lg font-semibold">
-
-                    Product Intelligence Table
-
-                  </h2>
-
-                </div>
-
-
-                <p className="mt-1 text-sm text-gray-500">
-
-                  Historical pricing, demand and inventory signals.
-
-                </p>
-
-              </div>
-
-
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-
-                <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_8px_rgba(163,230,53,0.7)]" />
-
-                Live Dataset
-
-              </div>
-
-            </div>
-
-
-
-            {/* Table */}
-
-            <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[950px]">
-
-
-                <thead className="bg-[#080d0a]">
-
-                  <tr className="border-b border-white/5">
-
-                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Product
-
-                    </th>
-
-                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Category
-
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Avg. Price
-
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Units Sold
-
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Revenue
-
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Demand
-
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Inventory
-
-                    </th>
-
-                    <th className="px-5 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
-
-                      Stockouts
-
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-
-
-                <tbody>
-
-
-                  {/* Loading */}
-
-                  {loading && (
-
-                    <tr>
-
-                      <td
-                        colSpan="8"
-                        className="py-20 text-center"
-                      >
-
-                        <div className="flex flex-col items-center gap-3">
-
-                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-lime-300/20 border-t-lime-300" />
-
-                          <p className="text-sm text-gray-500">
-
-                            Loading product intelligence...
-
-                          </p>
-
-                        </div>
-
-                      </td>
-
-                    </tr>
-
-                  )}
-
-
-
-                  {/* Empty */}
-
-                  {!loading && filteredProducts.length === 0 && (
-
-                    <tr>
-
-                      <td
-                        colSpan="8"
-                        className="py-20 text-center"
-                      >
-
-                        <div className="flex flex-col items-center gap-3">
-
-                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-lime-400/5">
-
-                            <Package className="h-7 w-7 text-gray-600" />
-
-                          </div>
-
-
-                          <p className="font-semibold text-gray-300">
-
-                            No products found
-
-                          </p>
-
-
-                          <p className="text-sm text-gray-600">
-
-                            Try changing your search or category filter.
-
-                          </p>
-
-                        </div>
-
-                      </td>
-
-                    </tr>
-
-                  )}
-
-
-
-                  {/* Products */}
-
-                  {!loading &&
-                    filteredProducts.map((product) => (
-
-                      <tr
-                        key={product.product_id}
-                        className="border-b border-white/5 transition hover:bg-lime-400/[0.025]"
-                      >
-
-
-                        {/* Product */}
-
-                        <td className="px-5 py-4">
-
-                          <div className="flex items-center gap-3">
-
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lime-400/10">
-
-                              <Package
-                                size={18}
-                                className="text-lime-300"
-                              />
-
-                            </div>
-
-
-                            <span className="font-semibold text-gray-200">
-
-                              {product.product_id}
-
-                            </span>
-
-                          </div>
-
-                        </td>
-
-
-
-                        {/* Category */}
-
-                        <td className="px-5 py-4">
-
-                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-gray-400">
-
-                            {product.category}
-
-                          </span>
-
-                        </td>
-
-
-
-                        {/* Price */}
-
-                        <td className="px-5 py-4 text-right font-semibold text-gray-200">
-
-                          $
-                          {Number(
-                            product.average_price
-                          ).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-
-                        </td>
-
-
-
-                        {/* Units Sold */}
-
-                        <td className="px-5 py-4 text-right text-gray-400">
-
-                          {Number(
-                            product.total_units_sold
-                          ).toLocaleString("en-US")}
-
-                        </td>
-
-
-
-                        {/* Revenue */}
-
-                        <td className="px-5 py-4 text-right font-semibold text-emerald-300">
-
-                          $
-                          {Number(
-                            product.total_revenue
-                          ).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-
-                        </td>
-
-
-
-                        {/* Demand */}
-
-                        <td className="px-5 py-4 text-right">
-
-                          <div className="flex items-center justify-end gap-2">
-
-                            <TrendingUp
-                              size={15}
-                              className="text-lime-300"
-                            />
-
-                            <span className="font-semibold text-gray-300">
-
-                              {product.average_demand_index}
-
-                            </span>
-
-                          </div>
-
-                        </td>
-
-
-
-                        {/* Inventory */}
-
-                        <td className="px-5 py-4 text-right">
-
-                          <div className="flex items-center justify-end gap-2">
-
-                            <Boxes
-                              size={15}
-                              className="text-blue-300"
-                            />
-
-                            <span className="text-gray-400">
-
-                              {product.average_inventory}
-
-                            </span>
-
-                          </div>
-
-                        </td>
-
-
-
-                        {/* Stockouts */}
-
-                        <td className="px-5 py-4 text-center">
-
-                          {product.stockout_count > 0 ? (
-
-                            <span className="inline-flex items-center gap-1 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-xs font-semibold text-orange-300">
-
-                              <AlertTriangle size={13} />
-
-                              {product.stockout_count}
-
-                            </span>
-
-                          ) : (
-
-                            <span className="font-semibold text-emerald-300">
-
-                              0
-
-                            </span>
-
-                          )}
-
-                        </td>
-
-
-                      </tr>
-
-                    ))}
-
-                </tbody>
-
-              </table>
-
-            </div>
-
-
-
-            {/* =========================
-                PAGINATION
-            ========================= */}
-
-            <div className="flex flex-col gap-4 border-t border-white/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-
-
-              <p className="text-sm text-gray-500">
-
-                Page{" "}
-
-                <span className="font-semibold text-gray-300">
-
-                  {page}
-
-                </span>{" "}
-
-                of{" "}
-
-                <span className="font-semibold text-gray-300">
-
-                  {totalPages || 1}
-
-                </span>
-
+                PricePilot AI
               </p>
 
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "30px",
+                  fontWeight: "700",
+                  letterSpacing:
+                    "-0.5px",
 
-              <div className="flex gap-2">
+                  color: "#f8fafc",
 
+                  textShadow:
+                    "0 0 10px rgba(255,255,255,0.08), 0 0 25px rgba(34,197,94,0.18)",
+                }}
+              >
+                Pricing Analytics
+              </h1>
 
-                <button
-                  onClick={handlePrevious}
-                  disabled={page === 1}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-sm text-gray-400 transition hover:border-lime-400/20 hover:bg-lime-400/5 hover:text-lime-300 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-
-                  <ChevronLeft size={17} />
-
-                  Previous
-
-                </button>
-
-
-
-                <button
-                  onClick={handleNext}
-                  disabled={page >= totalPages}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-sm text-gray-400 transition hover:border-lime-400/20 hover:bg-lime-400/5 hover:text-lime-300 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-
-                  Next
-
-                  <ChevronRight size={17} />
-
-                </button>
-
-              </div>
-
+              <p
+                style={{
+                  marginTop: "8px",
+                  marginBottom: 0,
+                  color: "#94a3b8",
+                  fontSize: "15px",
+                }}
+              >
+                Revenue intelligence,
+                demand signals and
+                pricing performance
+                insights
+              </p>
             </div>
 
-          </section>
+            {/* REFRESH BUTTON */}
 
+            <button
+              onClick={fetchAnalytics}
+              style={{
+                background:
+                  "linear-gradient(135deg, #22c55e, #16a34a)",
+                color: "#03150a",
+                border:
+                  "1px solid rgba(134,239,172,0.8)",
+                borderRadius: "9px",
+                padding:
+                  "10px 18px",
+                fontWeight: "800",
+                cursor: "pointer",
+                fontSize: "14px",
 
+                boxShadow:
+                  "0 0 8px rgba(34,197,94,0.8), 0 0 20px rgba(34,197,94,0.55), 0 0 35px rgba(34,197,94,0.28), inset 0 0 8px rgba(255,255,255,0.18)",
 
-          {/* =========================
-              INTELLIGENCE INFORMATION
-          ========================= */}
+                textShadow:
+                  "0 0 8px rgba(255,255,255,0.35)",
 
-          <section className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
+                transition:
+                  "all 0.3s ease",
+              }}
+            >
+              Refresh Data
+            </button>
+          </div>
+        </div>
 
+        {/* ===================================================
+            ERROR
+        ==================================================== */}
 
-            {/* Pricing */}
+        {error && (
+          <div
+            style={{
+              background:
+                "rgba(69,26,3,0.85)",
 
-            <div className="rounded-2xl border border-lime-400/10 bg-[#0b110e] p-5">
+              border:
+                "1px solid rgba(251,146,60,0.65)",
 
-              <div className="flex items-center gap-3">
+              color: "#fed7aa",
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10">
+              borderRadius: "10px",
 
-                  <DollarSign className="h-5 w-5 text-emerald-300" />
+              padding:
+                "14px 16px",
 
-                </div>
+              marginBottom: "24px",
 
+              boxShadow:
+                "0 0 15px rgba(251,146,60,0.15)",
+            }}
+          >
+            {error}
+          </div>
+        )}
 
-                <div>
+        {/* ===================================================
+            KPI CARDS
+        ==================================================== */}
 
-                  <p className="text-xs uppercase tracking-wider text-gray-600">
+        <div
+          style={{
+            display: "grid",
 
-                    Pricing Data
+            gridTemplateColumns:
+              "repeat(4, minmax(0, 1fr))",
 
-                  </p>
+            gap: "18px",
 
-                  <p className="mt-1 font-semibold text-gray-300">
+            marginBottom: "28px",
+          }}
+        >
+          {/* TOTAL REVENUE */}
 
-                    Dataset-backed
+          <div style={cardStyle}>
+            <div style={kpiGlowDotStyle} />
 
-                  </p>
+            <p style={cardLabelStyle}>
+              Total Revenue
+            </p>
 
-                </div>
+            <h2 style={cardValueStyle}>
+              {formatCurrency(
+                summary?.total_revenue
+              )}
+            </h2>
 
-              </div>
+            <p style={cardSubStyle}>
+              Overall revenue
+            </p>
+          </div>
 
+          {/* UNITS SOLD */}
+
+          <div style={cardStyle}>
+            <div style={kpiGlowDotStyle} />
+
+            <p style={cardLabelStyle}>
+              Units Sold
+            </p>
+
+            <h2 style={cardValueStyle}>
+              {formatNumber(
+                summary?.total_units_sold
+              )}
+            </h2>
+
+            <p style={cardSubStyle}>
+              Total units sold
+            </p>
+          </div>
+
+          {/* DEMAND INDEX */}
+
+          <div style={cardStyle}>
+            <div style={kpiGlowDotStyle} />
+
+            <p style={cardLabelStyle}>
+              Avg. Demand Index
+            </p>
+
+            <h2 style={cardValueStyle}>
+              {Number(
+                summary?.average_demand_index ||
+                  0
+              ).toFixed(2)}
+            </h2>
+
+            <p style={cardSubStyle}>
+              Average demand strength
+            </p>
+          </div>
+
+          {/* DISCOUNT */}
+
+          <div style={cardStyle}>
+            <div style={kpiGlowDotStyle} />
+
+            <p style={cardLabelStyle}>
+              Avg. Discount
+            </p>
+
+            <h2 style={cardValueStyle}>
+              {Number(
+                summary?.average_discount_pct ||
+                  0
+              ).toFixed(2)}
+              %
+            </h2>
+
+            <p style={cardSubStyle}>
+              Average discount
+              applied
+            </p>
+          </div>
+        </div>
+
+        {/* ===================================================
+            FOUR CHART GRID
+        ==================================================== */}
+
+        <div
+          style={{
+            display: "grid",
+
+            gridTemplateColumns:
+              "repeat(2, minmax(0, 1fr))",
+
+            gap: "22px",
+          }}
+        >
+          {/* =================================================
+              CHART 1
+              REVENUE TREND
+          ================================================== */}
+
+          <div style={chartCardStyle}>
+            <ChartHeader
+              title="Revenue Trend"
+              subtitle="Daily revenue performance"
+            />
+
+            <div
+              style={{
+                width: "100%",
+                height: 300,
+              }}
+            >
+              {formattedTrendData.length >
+              0 ? (
+                <ResponsiveContainer>
+                  <AreaChart
+                    data={
+                      formattedTrendData
+                    }
+                    margin={{
+                      top: 10,
+                      right: 10,
+                      left: -10,
+                      bottom: 5,
+                    }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="revenueGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="#22c55e"
+                          stopOpacity={0.5}
+                        />
+
+                        <stop
+                          offset="100%"
+                          stopColor="#22c55e"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+
+                    <CartesianGrid
+                      stroke="#1e293b"
+                      strokeDasharray="3 3"
+                    />
+
+                    <XAxis
+                      dataKey="date"
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(value) =>
+                        String(
+                          value
+                        ).slice(0, 10)
+                      }
+                    />
+
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(
+                        value
+                      ) =>
+                        `₹${(
+                          value /
+                          1000000
+                        ).toFixed(1)}M`
+                      }
+                    />
+
+                    <Tooltip
+                      content={
+                        <RevenueTooltip />
+                      }
+                    />
+
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      name="Revenue"
+                      stroke="#22c55e"
+                      fill="url(#revenueGradient)"
+                      strokeWidth={3}
+                      style={{
+                        filter:
+                          "drop-shadow(0 0 6px rgba(34,197,94,0.8))",
+                      }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart />
+              )}
             </div>
+          </div>
 
+          {/* =================================================
+              CHART 2
+              DEMAND TREND
+          ================================================== */}
 
+          <div style={chartCardStyle}>
+            <ChartHeader
+              title="Demand Trend"
+              subtitle="Daily demand index movement"
+            />
 
-            {/* Demand */}
+            <div
+              style={{
+                width: "100%",
+                height: 300,
+              }}
+            >
+              {formattedTrendData.length >
+              0 ? (
+                <ResponsiveContainer>
+                  <LineChart
+                    data={
+                      formattedTrendData
+                    }
+                    margin={{
+                      top: 10,
+                      right: 10,
+                      left: -10,
+                      bottom: 5,
+                    }}
+                  >
+                    <CartesianGrid
+                      stroke="#1e293b"
+                      strokeDasharray="3 3"
+                    />
 
-            <div className="rounded-2xl border border-lime-400/10 bg-[#0b110e] p-5">
+                    <XAxis
+                      dataKey="date"
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(value) =>
+                        String(
+                          value
+                        ).slice(0, 10)
+                      }
+                    />
 
-              <div className="flex items-center gap-3">
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                    />
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-400/10">
+                    <Tooltip
+                      content={
+                        <DemandTooltip />
+                      }
+                    />
 
-                  <TrendingUp className="h-5 w-5 text-lime-300" />
+                    <ReferenceLine
+                      y={100}
+                      stroke="#64748b"
+                      strokeDasharray="5 5"
+                    />
 
-                </div>
-
-
-                <div>
-
-                  <p className="text-xs uppercase tracking-wider text-gray-600">
-
-                    Demand Intelligence
-
-                  </p>
-
-                  <p className="mt-1 font-semibold text-gray-300">
-
-                    Historical demand
-
-                  </p>
-
-                </div>
-
-              </div>
-
+                    <Line
+                      type="monotone"
+                      dataKey="demand_index"
+                      name="Demand Index"
+                      stroke="#60a5fa"
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{
+                        r: 6,
+                        stroke:
+                          "#bfdbfe",
+                        strokeWidth: 2,
+                        fill: "#60a5fa",
+                      }}
+                      style={{
+                        filter:
+                          "drop-shadow(0 0 6px rgba(96,165,250,0.8))",
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart />
+              )}
             </div>
+          </div>
 
+          {/* =================================================
+              CHART 3
+              REVENUE BY CATEGORY
+          ================================================== */}
 
+          <div style={chartCardStyle}>
+            <ChartHeader
+              title="Revenue by Category"
+              subtitle="Category revenue contribution"
+            />
 
-            {/* Inventory */}
+            <div
+              style={{
+                width: "100%",
+                height: 300,
+              }}
+            >
+              {formattedCategoryData.length >
+              0 ? (
+                <ResponsiveContainer>
+                  <BarChart
+                    data={
+                      formattedCategoryData
+                    }
+                    margin={{
+                      top: 10,
+                      right: 10,
+                      left: -10,
+                      bottom: 5,
+                    }}
+                  >
+                    <CartesianGrid
+                      stroke="#1e293b"
+                      strokeDasharray="3 3"
+                    />
 
-            <div className="rounded-2xl border border-lime-400/10 bg-[#0b110e] p-5">
+                    <XAxis
+                      dataKey="category"
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#cbd5e1",
+                        fontSize: 10,
+                      }}
+                    />
 
-              <div className="flex items-center gap-3">
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(
+                        value
+                      ) =>
+                        `₹${(
+                          value /
+                          1000000
+                        ).toFixed(1)}M`
+                      }
+                    />
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-400/10">
+                    <Tooltip
+                      content={
+                        <CategoryTooltip />
+                      }
+                    />
 
-                  <Boxes className="h-5 w-5 text-blue-300" />
-
-                </div>
-
-
-                <div>
-
-                  <p className="text-xs uppercase tracking-wider text-gray-600">
-
-                    Product Coverage
-
-                  </p>
-
-                  <p className="mt-1 font-semibold text-gray-300">
-
-                    {total.toLocaleString("en-US")} products
-
-                  </p>
-
-                </div>
-
-              </div>
-
+                    <Bar
+                      dataKey="revenue"
+                      name="Revenue"
+                      fill="#22c55e"
+                      radius={[
+                        5,
+                        5,
+                        0,
+                        0,
+                      ]}
+                      style={{
+                        filter:
+                          "drop-shadow(0 0 6px rgba(34,197,94,0.65))",
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart />
+              )}
             </div>
+          </div>
 
-          </section>
+          {/* =================================================
+              CHART 4
+              UNITS SOLD BY CATEGORY
+          ================================================== */}
 
+          <div style={chartCardStyle}>
+            <ChartHeader
+              title="Units Sold by Category"
+              subtitle="Sales volume across categories"
+            />
 
-        </main>
+            <div
+              style={{
+                width: "100%",
+                height: 300,
+              }}
+            >
+              {formattedCategoryData.length >
+              0 ? (
+                <ResponsiveContainer>
+                  <BarChart
+                    data={
+                      formattedCategoryData
+                    }
+                    margin={{
+                      top: 10,
+                      right: 10,
+                      left: -10,
+                      bottom: 5,
+                    }}
+                  >
+                    <CartesianGrid
+                      stroke="#1e293b"
+                      strokeDasharray="3 3"
+                    />
 
+                    <XAxis
+                      dataKey="category"
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#cbd5e1",
+                        fontSize: 10,
+                      }}
+                    />
+
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{
+                        fill: "#94a3b8",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(value) =>
+                        `${(
+                          value / 1000
+                        ).toFixed(0)}K`
+                      }
+                    />
+
+                    <Tooltip
+                      content={
+                        <CategoryTooltip />
+                      }
+                    />
+
+                    <Bar
+                      dataKey="units_sold"
+                      name="Units Sold"
+                      fill="#60a5fa"
+                      radius={[
+                        5,
+                        5,
+                        0,
+                        0,
+                      ]}
+                      style={{
+                        filter:
+                          "drop-shadow(0 0 6px rgba(96,165,250,0.7))",
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChart />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ===================================================
+            FOOTER
+        ==================================================== */}
+
+        <div
+          style={{
+            marginTop: "24px",
+
+            background:
+              "linear-gradient(135deg, rgba(17,24,39,0.95), rgba(9,18,29,0.95))",
+
+            border:
+              "1px solid rgba(34,197,94,0.5)",
+
+            borderRadius: "12px",
+
+            padding:
+              "16px 20px",
+
+            color: "#94a3b8",
+
+            fontSize: "13px",
+
+            boxShadow:
+              "0 0 8px rgba(34,197,94,0.35), 0 0 20px rgba(34,197,94,0.18), inset 0 0 15px rgba(34,197,94,0.04)",
+          }}
+        >
+          <strong
+            style={{
+              color: "#86efac",
+
+              textShadow:
+                "0 0 8px rgba(134,239,172,0.75), 0 0 18px rgba(34,197,94,0.45)",
+            }}
+          >
+            PricePilot AI
+          </strong>{" "}
+          — Analytics are generated
+          from pricing, sales,
+          revenue, discount,
+          inventory and demand
+          signals.
+        </div>
       </div>
-
     </div>
-
   );
-
 }
 
+// =========================================================
+// CHART HEADER
+// =========================================================
 
-export default Products;
+function ChartHeader({
+  title,
+  subtitle,
+}) {
+  return (
+    <div
+      style={{
+        marginBottom: "12px",
+      }}
+    >
+      <h2
+        style={{
+          margin: 0,
+          color: "#f8fafc",
+          fontSize: "16px",
+          fontWeight: "650",
+
+          textShadow:
+            "0 0 8px rgba(255,255,255,0.08), 0 0 18px rgba(34,197,94,0.25)",
+        }}
+      >
+        {title}
+      </h2>
+
+      <p
+        style={{
+          margin:
+            "5px 0 0",
+          color: "#64748b",
+          fontSize: "11px",
+        }}
+      >
+        {subtitle}
+      </p>
+    </div>
+  );
+}
+
+// =========================================================
+// EMPTY CHART
+// =========================================================
+
+function EmptyChart({
+  message = "No data available",
+}) {
+  return (
+    <div
+      style={{
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#64748b",
+        fontSize: "13px",
+      }}
+    >
+      {message}
+    </div>
+  );
+}
+
+// =========================================================
+// KPI CARD STYLE
+// =========================================================
+
+const cardStyle = {
+  background:
+    "linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,18,28,0.98))",
+
+  border:
+    "1px solid rgba(34,197,94,0.9)",
+
+  borderRadius: "12px",
+
+  padding: "20px",
+
+  minHeight: "125px",
+
+  boxSizing: "border-box",
+
+  position: "relative",
+
+  overflow: "hidden",
+
+  boxShadow:
+    "0 0 8px rgba(34,197,94,0.85), 0 0 20px rgba(34,197,94,0.6), 0 0 40px rgba(34,197,94,0.4), 0 0 65px rgba(34,197,94,0.18), inset 0 0 20px rgba(34,197,94,0.09)",
+
+  transition:
+    "all 0.3s ease",
+};
+
+// =========================================================
+// KPI GLOW DOT
+// =========================================================
+
+const kpiGlowDotStyle = {
+  position: "absolute",
+
+  top: "-25px",
+
+  right: "-25px",
+
+  width: "80px",
+
+  height: "80px",
+
+  borderRadius: "50%",
+
+  background:
+    "radial-gradient(circle, rgba(34,197,94,0.28) 0%, rgba(34,197,94,0.08) 45%, transparent 70%)",
+
+  pointerEvents: "none",
+};
+
+// =========================================================
+// KPI TEXT STYLES
+// =========================================================
+
+const cardLabelStyle = {
+  margin: 0,
+
+  color: "#94a3b8",
+
+  fontSize: "13px",
+
+  fontWeight: "500",
+};
+
+const cardValueStyle = {
+  margin:
+    "10px 0 4px",
+
+  color: "#f8fafc",
+
+  fontSize: "25px",
+
+  fontWeight: "700",
+
+  textShadow:
+    "0 0 8px rgba(255,255,255,0.1), 0 0 18px rgba(34,197,94,0.3)",
+};
+
+const cardSubStyle = {
+  margin: 0,
+
+  color: "#64748b",
+
+  fontSize: "12px",
+};
+
+// =========================================================
+// CHART CARD STYLE
+// =========================================================
+
+const chartCardStyle = {
+  background:
+    "linear-gradient(145deg, rgba(17,24,39,0.98), rgba(8,18,28,0.98))",
+
+  border:
+    "1px solid rgba(34,197,94,0.75)",
+
+  borderRadius: "14px",
+
+  padding: "18px",
+
+  boxSizing: "border-box",
+
+  minWidth: 0,
+
+  boxShadow:
+    "0 0 8px rgba(34,197,94,0.7), 0 0 20px rgba(34,197,94,0.42), 0 0 40px rgba(34,197,94,0.24), 0 0 65px rgba(34,197,94,0.12), inset 0 0 18px rgba(34,197,94,0.055)",
+
+  transition:
+    "all 0.3s ease",
+};
+
+// =========================================================
+// TOOLTIP
+// =========================================================
+
+const tooltipStyle = {
+  background:
+    "rgba(9,15,25,0.97)",
+
+  border:
+    "1px solid rgba(34,197,94,0.55)",
+
+  borderRadius: "10px",
+
+  padding: "12px 14px",
+
+  color: "#fff",
+
+  boxShadow:
+    "0 0 12px rgba(34,197,94,0.35), 0 8px 25px rgba(0,0,0,0.45)",
+};
+
+const tooltipLabelStyle = {
+  margin:
+    "0 0 8px",
+
+  fontWeight: "600",
+
+  color: "#d1d5db",
+};
+
+export default PricingAnalytics;

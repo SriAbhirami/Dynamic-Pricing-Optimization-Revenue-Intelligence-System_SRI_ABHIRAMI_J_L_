@@ -64,7 +64,7 @@ function Register() {
 
   const handleGoogleRegister = async (credentialResponse) => {
     try {
-      const response = await API.post("/users/google-login", {
+      const response = await API.post("/users/google", {
         credential: credentialResponse.credential
       });
 
