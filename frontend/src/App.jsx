@@ -7,7 +7,7 @@ import Products from "./pages/Products";
 import PricingIntelligence from "./pages/PricingIntelligence";
 import Forecast from "./pages/Forecast";
 import RoleSelection from "./pages/RoleSelection";
-
+import UserManagement from "./pages/UserManagement";
 
 
 function App() {
@@ -58,6 +58,16 @@ function App() {
         <Route
           path="/dashboard"
           element={<Dashboard />}
+        />
+
+
+        {/* =========================
+            User Management
+            Admin Feature
+        ========================= */}
+        <Route
+          path="/user-management"
+          element={<UserManagement />}
         />
 
 
