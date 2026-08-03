@@ -17,12 +17,16 @@ import {
   Sparkles,
   TrendingUp,
   Zap,
+  Target,
+  BarChart3,
 } from "lucide-react";
 
+import { getProducts } from "../api/pricingDemand";
+
 import {
-  getProducts,
+  optimizeProductPrice,
   analyzeProductPricing,
-} from "../api/pricingDemand";
+} from "../api/pricePrediction";
 
 
 // ============================================================
@@ -49,7 +53,6 @@ const getDemandStyle = (level) => {
       text: "text-lime-300",
       border: "border-lime-300/40",
       background: "bg-lime-300/10",
-      glow: "shadow-[0_0_25px_rgba(163,230,53,0.12)]",
     };
   }
 
@@ -58,7 +61,6 @@ const getDemandStyle = (level) => {
       text: "text-yellow-300",
       border: "border-yellow-300/40",
       background: "bg-yellow-300/10",
-      glow: "shadow-[0_0_25px_rgba(250,204,21,0.10)]",
     };
   }
 
@@ -66,7 +68,6 @@ const getDemandStyle = (level) => {
     text: "text-red-300",
     border: "border-red-300/40",
     background: "bg-red-300/10",
-    glow: "shadow-[0_0_25px_rgba(248,113,113,0.10)]",
   };
 };
 
@@ -130,16 +131,19 @@ function PricingIntelligence() {
 
 
   // ==========================================================
-  // ANALYSIS STATE
+  // OPTIMIZATION STATE
   // ==========================================================
+
+  const [optimization, setOptimization] =
+    useState(null);
 
   const [analysis, setAnalysis] =
     useState(null);
 
-  const [analysisLoading, setAnalysisLoading] =
+  const [optimizationLoading, setOptimizationLoading] =
     useState(false);
 
-  const [analysisError, setAnalysisError] =
+  const [optimizationError, setOptimizationError] =
     useState("");
 
 
@@ -220,21 +224,22 @@ function PricingIntelligence() {
       event.target.value
     );
 
+    setOptimization(null);
     setAnalysis(null);
-    setAnalysisError("");
+    setOptimizationError("");
 
   };
 
 
   // ==========================================================
-  // ANALYZE PRICING
+  // RUN REVENUE OPTIMIZATION
   // ==========================================================
 
-  const handleAnalyzePricing = async () => {
+  const handleOptimizePricing = async () => {
 
     if (!selectedProduct) {
 
-      setAnalysisError(
+      setOptimizationError(
         "Please select a product first."
       );
 
@@ -244,32 +249,64 @@ function PricingIntelligence() {
 
     try {
 
-      setAnalysisLoading(true);
-      setAnalysisError("");
+      setOptimizationLoading(true);
+      setOptimizationError("");
+
+      setOptimization(null);
       setAnalysis(null);
 
-      const result =
-        await analyzeProductPricing(
+      // ------------------------------------------------------
+      // MAIN REVENUE OPTIMIZATION
+      // ------------------------------------------------------
+
+      const optimizationResult =
+        await optimizeProductPrice(
           selectedProduct.id
         );
 
-      setAnalysis(result);
+      setOptimization(
+        optimizationResult
+      );
+
+      // ------------------------------------------------------
+      // BUSINESS EXPLANATION
+      // ------------------------------------------------------
+
+      try {
+
+        const analysisResult =
+          await analyzeProductPricing(
+            selectedProduct.id
+          );
+
+        setAnalysis(
+          analysisResult
+        );
+
+      } catch (analysisError) {
+
+        console.warn(
+          "Business analysis unavailable:",
+          analysisError
+        );
+
+      }
 
     } catch (error) {
 
       console.error(
-        "Pricing analysis failed:",
+        "Price optimization failed:",
         error
       );
 
-      setAnalysisError(
+      setOptimizationError(
         error.response?.data?.detail ||
-        "Unable to generate pricing analysis."
+        "Unable to generate revenue optimization."
       );
 
     } finally {
 
-      setAnalysisLoading(false);
+      setOptimizationLoading(false);
 
     }
 
@@ -331,7 +368,7 @@ function PricingIntelligence() {
 
         <main className="flex min-h-screen items-center justify-center px-6">
 
-          <div className="w-full max-w-lg rounded-3xl border border-red-400/30 bg-[#080d09] p-8 text-center shadow-[0_0_45px_rgba(248,113,113,0.08)]">
+          <div className="w-full max-w-lg rounded-3xl border border-red-400/30 bg-[#080d09] p-8 text-center">
 
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-400/10">
 
@@ -400,7 +437,7 @@ function PricingIntelligence() {
 
                 <span className="text-xs font-bold uppercase tracking-[0.3em] text-lime-300">
 
-                  ML Decision Layer
+                  ML Revenue Optimization
 
                 </span>
 
@@ -420,9 +457,9 @@ function PricingIntelligence() {
 
               <p className="mt-4 max-w-3xl text-sm leading-6 text-gray-500 sm:text-base">
 
-                Select a product from your actual product catalog
-                and analyze its pricing using demand, sales,
-                inventory and historical pricing signals.
+                Test multiple candidate prices, predict expected
+                demand and automatically identify the price that
+                maximizes expected revenue.
 
               </p>
 
@@ -468,15 +505,13 @@ function PricingIntelligence() {
 
         <section className="relative mt-7 overflow-hidden rounded-[32px] border border-lime-300/15 bg-[#071009] shadow-[0_0_60px_rgba(163,230,53,0.035)]">
 
-          <div className="pointer-events-none absolute -left-20 top-10 h-72 w-72 rounded-full bg-lime-300/5 blur-[100px]" />
-
           <div className="relative z-10 px-6 py-7 sm:px-8 lg:px-10">
 
             <div className="flex flex-col gap-3">
 
               <div className="flex items-center gap-3">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-300/10 shadow-[0_0_25px_rgba(163,230,53,0.12)]">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-300/10">
 
                   <Search className="h-5 w-5 text-lime-300" />
 
@@ -486,7 +521,7 @@ function PricingIntelligence() {
 
                   <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-lime-300">
 
-                    Product Analysis
+                    Product Optimization
 
                   </p>
 
@@ -502,15 +537,16 @@ function PricingIntelligence() {
 
               <p className="max-w-2xl text-sm leading-6 text-gray-500">
 
-                Products shown here are loaded directly from
-                your Product table.
+                Select a product from your catalog. The ML engine
+                will search candidate prices and choose the one
+                with the highest predicted revenue.
 
               </p>
 
             </div>
 
 
-            {/* Product Dropdown */}
+            {/* PRODUCT DROPDOWN */}
 
             <div className="relative mt-7">
 
@@ -551,28 +587,17 @@ function PricingIntelligence() {
             </div>
 
 
-            {/* ==================================================
-                SELECTED PRODUCT CARD
-            ================================================== */}
+            {/* SELECTED PRODUCT */}
 
             {selectedProduct && (
 
               <div className="relative mt-7 overflow-hidden rounded-[28px] border-2 border-lime-300/20 bg-[#030604] shadow-[0_0_60px_rgba(163,230,53,0.07)]">
 
-                <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-lime-300/10 blur-[90px]" />
-
-                <div className="pointer-events-none absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-emerald-300/5 blur-[90px]" />
-
                 <div className="relative z-10 p-6 sm:p-8 lg:p-10">
-
-
-                  {/* Product Identity */}
 
                   <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_2fr]">
 
-                    {/* Product ID */}
-
-                    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/[0.035] p-6 shadow-[0_0_30px_rgba(163,230,53,0.06)]">
+                    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/[0.035] p-6">
 
                       <div className="flex items-center gap-3">
 
@@ -590,7 +615,7 @@ function PricingIntelligence() {
 
                       </div>
 
-                      <p className="mt-5 text-5xl font-black tracking-tight text-lime-300 drop-shadow-[0_0_20px_rgba(163,230,53,0.55)]">
+                      <p className="mt-5 text-5xl font-black text-lime-300">
 
                         #{selectedProduct.id}
 
@@ -599,9 +624,7 @@ function PricingIntelligence() {
                     </div>
 
 
-                    {/* Product Name */}
-
-                    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/[0.035] p-6 shadow-[0_0_30px_rgba(163,230,53,0.06)]">
+                    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/[0.035] p-6">
 
                       <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
 
@@ -609,7 +632,7 @@ function PricingIntelligence() {
 
                       </p>
 
-                      <h3 className="mt-4 break-words text-3xl font-black tracking-tight text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.15)] sm:text-4xl">
+                      <h3 className="mt-4 break-words text-3xl font-black sm:text-4xl">
 
                         {selectedProduct.name}
 
@@ -620,14 +643,9 @@ function PricingIntelligence() {
                   </div>
 
 
-                  {/* Product Details */}
-
                   <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-
-                    {/* Category */}
-
-                    <div className="rounded-2xl border border-white/10 bg-[#071009] p-5 transition hover:border-lime-300/25">
+                    <div className="rounded-2xl border border-white/10 bg-[#071009] p-5">
 
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
 
@@ -635,7 +653,7 @@ function PricingIntelligence() {
 
                       </p>
 
-                      <p className="mt-3 text-xl font-black text-white">
+                      <p className="mt-3 text-xl font-black">
 
                         {selectedProduct.category}
 
@@ -644,9 +662,7 @@ function PricingIntelligence() {
                     </div>
 
 
-                    {/* Current Price */}
-
-                    <div className="rounded-2xl border border-lime-300/20 bg-[#071009] p-5 shadow-[0_0_30px_rgba(163,230,53,0.05)]">
+                    <div className="rounded-2xl border border-lime-300/20 bg-[#071009] p-5">
 
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
 
@@ -654,7 +670,7 @@ function PricingIntelligence() {
 
                       </p>
 
-                      <p className="mt-3 flex items-center text-2xl font-black text-lime-300 drop-shadow-[0_0_14px_rgba(163,230,53,0.35)]">
+                      <p className="mt-3 flex items-center text-2xl font-black text-lime-300">
 
                         <IndianRupee className="mr-1 h-5 w-5" />
 
@@ -667,8 +683,6 @@ function PricingIntelligence() {
                     </div>
 
 
-                    {/* Stock */}
-
                     <div className="rounded-2xl border border-white/10 bg-[#071009] p-5">
 
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
@@ -677,7 +691,7 @@ function PricingIntelligence() {
 
                       </p>
 
-                      <p className="mt-3 text-2xl font-black text-white">
+                      <p className="mt-3 text-2xl font-black">
 
                         {Number(
                           selectedProduct.stock
@@ -694,21 +708,19 @@ function PricingIntelligence() {
                     </div>
 
 
-                    {/* Created At */}
-
                     <div className="rounded-2xl border border-white/10 bg-[#071009] p-5">
 
                       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
 
-                        Catalog Status
+                        Optimization Goal
 
                       </p>
 
                       <p className="mt-3 flex items-center gap-2 text-lg font-black text-lime-300">
 
-                        <span className="h-2.5 w-2.5 rounded-full bg-lime-300 shadow-[0_0_12px_rgba(163,230,53,1)]" />
+                        <Target className="h-5 w-5" />
 
-                        ACTIVE
+                        MAX REVENUE
 
                       </p>
 
@@ -723,29 +735,27 @@ function PricingIntelligence() {
             )}
 
 
-            {/* ==================================================
-                ANALYZE BUTTON
-            ================================================== */}
+            {/* OPTIMIZE BUTTON */}
 
             <div className="mt-8 flex justify-center">
 
               <button
                 type="button"
-                onClick={handleAnalyzePricing}
+                onClick={handleOptimizePricing}
                 disabled={
-                  analysisLoading ||
+                  optimizationLoading ||
                   !selectedProduct
                 }
-                className="group flex min-w-[260px] items-center justify-center gap-3 rounded-2xl border-2 border-lime-300/40 bg-lime-300/10 px-8 py-5 text-sm font-black uppercase tracking-[0.2em] text-lime-300 shadow-[0_0_35px_rgba(163,230,53,0.10)] transition duration-300 hover:border-lime-300/80 hover:bg-lime-300/15 hover:shadow-[0_0_55px_rgba(163,230,53,0.22)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="group flex min-w-[300px] items-center justify-center gap-3 rounded-2xl border-2 border-lime-300/40 bg-lime-300/10 px-8 py-5 text-sm font-black uppercase tracking-[0.2em] text-lime-300 shadow-[0_0_35px_rgba(163,230,53,0.10)] transition duration-300 hover:border-lime-300/80 hover:bg-lime-300/15 hover:shadow-[0_0_55px_rgba(163,230,53,0.22)] disabled:cursor-not-allowed disabled:opacity-50"
               >
 
-                {analysisLoading ? (
+                {optimizationLoading ? (
 
                   <>
 
                     <Activity className="h-5 w-5 animate-spin" />
 
-                    Analyzing Pricing...
+                    Optimizing Revenue...
 
                   </>
 
@@ -755,7 +765,7 @@ function PricingIntelligence() {
 
                     <Zap className="h-5 w-5 transition group-hover:scale-125" />
 
-                    Analyze Pricing
+                    Optimize Price
 
                   </>
 
@@ -766,9 +776,9 @@ function PricingIntelligence() {
             </div>
 
 
-            {/* Analysis Error */}
+            {/* ERROR */}
 
-            {analysisError && (
+            {optimizationError && (
 
               <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/5 px-5 py-4">
 
@@ -780,13 +790,13 @@ function PricingIntelligence() {
 
                     <p className="text-sm font-bold text-red-300">
 
-                      Pricing Analysis Failed
+                      Price Optimization Failed
 
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-red-200/70">
 
-                      {analysisError}
+                      {optimizationError}
 
                     </p>
 
@@ -804,23 +814,19 @@ function PricingIntelligence() {
 
 
         {/* ==================================================
-            ANALYSIS RESULT
+            OPTIMIZATION RESULT
         ================================================== */}
 
-        {analysis && (
+        {optimization && (
 
           <section className="relative mt-7 overflow-hidden rounded-[32px] border-2 border-lime-300/20 bg-[#071009] shadow-[0_0_80px_rgba(163,230,53,0.06)]">
 
             <div className="pointer-events-none absolute -right-28 -top-28 h-96 w-96 rounded-full bg-lime-300/10 blur-[120px]" />
 
-            <div className="pointer-events-none absolute -bottom-32 left-1/4 h-80 w-80 rounded-full bg-emerald-300/5 blur-[110px]" />
-
             <div className="relative z-10">
 
 
-              {/* ==================================================
-                  RESULT HEADER
-              ================================================== */}
+              {/* RESULT HEADER */}
 
               <div className="border-b border-white/5 px-6 py-7 sm:px-8 lg:px-10">
 
@@ -830,11 +836,11 @@ function PricingIntelligence() {
 
                     <div className="flex items-center gap-3">
 
-                      <Sparkles className="h-6 w-6 text-lime-300 drop-shadow-[0_0_12px_rgba(163,230,53,0.7)]" />
+                      <Sparkles className="h-6 w-6 text-lime-300" />
 
                       <p className="text-xs font-bold uppercase tracking-[0.25em] text-lime-300">
 
-                        Pricing Analysis Result
+                        Revenue Optimization Result
 
                       </p>
 
@@ -842,15 +848,15 @@ function PricingIntelligence() {
 
                     <h2 className="mt-3 text-3xl font-black">
 
-                      {analysis.product_name}
+                      {optimization.product_name}
 
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-500">
 
-                      Product ID #{analysis.product_id}
+                      Product ID #{optimization.product_id}
                       {" · "}
-                      {analysis.category}
+                      {optimization.category}
 
                     </p>
 
@@ -863,7 +869,7 @@ function PricingIntelligence() {
 
                     <span className="text-xs font-bold uppercase tracking-[0.15em] text-lime-300">
 
-                      Analysis Complete
+                      Revenue Optimization Complete
 
                     </span>
 
@@ -878,39 +884,37 @@ function PricingIntelligence() {
 
 
                 {/* ==================================================
-                    CURRENT → PREDICTED PRICE
+                    MAIN KPI CARDS
                 ================================================== */}
 
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
 
 
-                  {/* Current Price */}
+                  {/* CURRENT PRICE */}
 
-                  <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#030604] p-7 text-center shadow-[0_0_40px_rgba(0,0,0,0.25)]">
+                  <div className="rounded-[26px] border border-white/10 bg-[#030604] p-7">
 
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent" />
+                    <div className="flex items-center justify-between">
 
-                    <p className="relative text-xs font-bold uppercase tracking-[0.25em] text-gray-500">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
 
-                      Current Price
+                        Current Price
 
-                    </p>
+                      </p>
 
-                    <div className="relative mt-5 flex items-center justify-center">
-
-                      <IndianRupee className="h-8 w-8 text-gray-400" />
-
-                      <span className="text-4xl font-black text-white sm:text-5xl">
-
-                        {formatCurrency(
-                          analysis.current_price
-                        )}
-
-                      </span>
+                      <IndianRupee className="h-5 w-5 text-gray-500" />
 
                     </div>
 
-                    <p className="relative mt-4 text-xs text-gray-600">
+                    <p className="mt-5 text-4xl font-black">
+
+                      ₹{formatCurrency(
+                        optimization.current_price
+                      )}
+
+                    </p>
+
+                    <p className="mt-2 text-xs text-gray-600">
 
                       Current catalog price
 
@@ -919,58 +923,106 @@ function PricingIntelligence() {
                   </div>
 
 
-                  {/* Arrow */}
+                  {/* RECOMMENDED PRICE */}
 
-                  <div className="flex items-center justify-center">
+                  <div className="relative overflow-hidden rounded-[26px] border-2 border-lime-300/35 bg-lime-300/[0.035] p-7 shadow-[0_0_45px_rgba(163,230,53,0.10)]">
 
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-lime-300/25 bg-lime-300/10 shadow-[0_0_30px_rgba(163,230,53,0.12)]">
+                    <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-full bg-lime-300/10 blur-[50px]" />
 
-                      {Number(
-                        analysis.price_difference
-                      ) >= 0 ? (
+                    <div className="relative flex items-center justify-between">
 
-                        <ArrowUp className="h-6 w-6 text-lime-300" />
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-lime-300">
 
-                      ) : (
+                        Recommended Price
 
-                        <ArrowDown className="h-6 w-6 text-orange-300" />
+                      </p>
 
-                      )}
+                      <Target className="h-5 w-5 text-lime-300" />
 
                     </div>
+
+                    <p className="relative mt-5 text-4xl font-black text-lime-300 drop-shadow-[0_0_20px_rgba(163,230,53,0.45)]">
+
+                      ₹{formatCurrency(
+                        optimization.recommended_price
+                      )}
+
+                    </p>
+
+                    <p className="relative mt-2 text-xs text-gray-500">
+
+                      Highest predicted revenue
+
+                    </p>
 
                   </div>
 
 
-                  {/* Predicted Price */}
+                  {/* EXPECTED UNITS */}
 
-                  <div className="relative overflow-hidden rounded-[28px] border-2 border-lime-300/30 bg-lime-300/[0.035] p-7 text-center shadow-[0_0_55px_rgba(163,230,53,0.10)]">
+                  <div className="rounded-[26px] border border-white/10 bg-[#030604] p-7">
 
-                    <div className="pointer-events-none absolute left-1/2 top-1/2 h-52 w-52 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime-300/10 blur-[70px]" />
+                    <div className="flex items-center justify-between">
 
-                    <p className="relative text-xs font-bold uppercase tracking-[0.25em] text-lime-300">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
 
-                      Predicted Price
+                        Expected Units
 
-                    </p>
+                      </p>
 
-                    <div className="relative mt-5 flex items-center justify-center">
-
-                      <IndianRupee className="h-9 w-9 text-lime-300 drop-shadow-[0_0_12px_rgba(163,230,53,0.7)]" />
-
-                      <span className="text-5xl font-black text-lime-300 drop-shadow-[0_0_22px_rgba(163,230,53,0.45)] sm:text-6xl">
-
-                        {formatCurrency(
-                          analysis.predicted_price
-                        )}
-
-                      </span>
+                      <ShoppingCart className="h-5 w-5 text-lime-300" />
 
                     </div>
 
-                    <p className="relative mt-4 text-xs text-gray-500">
+                    <p className="mt-5 text-4xl font-black">
 
-                      XGBoost recommended price
+                      {Number(
+                        optimization.expected_units_sold
+                      ).toLocaleString(
+                        "en-IN",
+                        {
+                          maximumFractionDigits: 2,
+                        }
+                      )}
+
+                    </p>
+
+                    <p className="mt-2 text-xs text-gray-600">
+
+                      Predicted units sold
+
+                    </p>
+
+                  </div>
+
+
+                  {/* EXPECTED REVENUE */}
+
+                  <div className="rounded-[26px] border border-lime-300/25 bg-lime-300/[0.025] p-7">
+
+                    <div className="flex items-center justify-between">
+
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
+
+                        Expected Revenue
+
+                      </p>
+
+                      <TrendingUp className="h-5 w-5 text-lime-300" />
+
+                    </div>
+
+                    <p className="mt-5 text-4xl font-black text-lime-300">
+
+                      ₹{formatCurrency(
+                        optimization.expected_revenue
+                      )}
+
+                    </p>
+
+                    <p className="mt-2 text-xs text-gray-600">
+
+                      Revenue at recommended price
 
                     </p>
 
@@ -980,15 +1032,13 @@ function PricingIntelligence() {
 
 
                 {/* ==================================================
-                    PRICE CHANGE
+                    PRICE / REVENUE CHANGES
                 ================================================== */}
 
                 <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
 
 
-                  {/* Rupee Difference */}
-
-                  <div className="rounded-[26px] border border-lime-300/20 bg-lime-300/[0.035] p-7 shadow-[0_0_35px_rgba(163,230,53,0.06)]">
+                  <div className="rounded-[26px] border border-lime-300/20 bg-lime-300/[0.035] p-7">
 
                     <div className="flex items-center justify-between">
 
@@ -996,25 +1046,22 @@ function PricingIntelligence() {
 
                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
 
-                          Price Difference
+                          Price Change
 
                         </p>
 
-                        <p className="mt-4 text-4xl font-black text-white">
+                        <p className="mt-4 text-4xl font-black text-lime-300">
 
                           {Number(
-                            analysis.price_difference
+                            optimization.price_change_percentage
                           ) >= 0
                             ? "+"
-                            : "-"}₹
+                            : ""}
 
-                          {formatCurrency(
-                            Math.abs(
-                              Number(
-                                analysis.price_difference
-                              )
-                            )
-                          )}
+                          {Number(
+                            optimization.price_change_percentage
+                          ).toFixed(2)}
+                          %
 
                         </p>
 
@@ -1023,7 +1070,7 @@ function PricingIntelligence() {
                       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-lime-300/10">
 
                         {Number(
-                          analysis.price_difference
+                          optimization.price_change_percentage
                         ) >= 0 ? (
 
                           <ArrowUp className="h-7 w-7 text-lime-300" />
@@ -1038,12 +1085,16 @@ function PricingIntelligence() {
 
                     </div>
 
+                    <p className="mt-4 text-xs text-gray-600">
+
+                      Recommended price vs current price
+
+                    </p>
+
                   </div>
 
 
-                  {/* Percentage */}
-
-                  <div className="rounded-[26px] border border-lime-300/20 bg-lime-300/[0.035] p-7 shadow-[0_0_35px_rgba(163,230,53,0.06)]">
+                  <div className="rounded-[26px] border border-lime-300/20 bg-lime-300/[0.035] p-7">
 
                     <div className="flex items-center justify-between">
 
@@ -1051,20 +1102,20 @@ function PricingIntelligence() {
 
                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
 
-                          Price Change
+                          Revenue Improvement
 
                         </p>
 
-                        <p className="mt-4 text-4xl font-black text-lime-300 drop-shadow-[0_0_15px_rgba(163,230,53,0.35)]">
+                        <p className="mt-4 text-4xl font-black text-lime-300">
 
                           {Number(
-                            analysis.price_change_percentage
+                            optimization.revenue_change_percentage
                           ) >= 0
                             ? "+"
                             : ""}
 
                           {Number(
-                            analysis.price_change_percentage
+                            optimization.revenue_change_percentage
                           ).toFixed(2)}
                           %
 
@@ -1074,11 +1125,17 @@ function PricingIntelligence() {
 
                       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-lime-300/10">
 
-                        <Percent className="h-7 w-7 text-lime-300" />
+                        <TrendingUp className="h-7 w-7 text-lime-300" />
 
                       </div>
 
                     </div>
+
+                    <p className="mt-4 text-xs text-gray-600">
+
+                      Predicted revenue improvement
+
+                    </p>
 
                   </div>
 
@@ -1091,18 +1148,18 @@ function PricingIntelligence() {
 
                 {(() => {
 
-                  const recommendationStyle =
+                  const style =
                     getRecommendationStyle(
-                      analysis.recommendation
+                      optimization.recommendation
                     );
 
                   const RecommendationIcon =
-                    recommendationStyle.icon;
+                    style.icon;
 
                   return (
 
                     <div
-                      className={`mt-6 rounded-[28px] border-2 ${recommendationStyle.border} ${recommendationStyle.background} p-7 ${recommendationStyle.glow}`}
+                      className={`mt-6 rounded-[28px] border-2 ${style.border} ${style.background} p-7`}
                     >
 
                       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1112,7 +1169,7 @@ function PricingIntelligence() {
                           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-black/20">
 
                             <RecommendationIcon
-                              className={`h-8 w-8 ${recommendationStyle.text}`}
+                              className={`h-8 w-8 ${style.text}`}
                             />
 
                           </div>
@@ -1121,16 +1178,16 @@ function PricingIntelligence() {
 
                             <p className="text-xs font-bold uppercase tracking-[0.25em] text-gray-500">
 
-                              Recommendation
+                              AI Pricing Recommendation
 
                             </p>
 
                             <h3
-                              className={`mt-2 text-3xl font-black ${recommendationStyle.text} drop-shadow-[0_0_16px_rgba(163,230,53,0.25)]`}
+                              className={`mt-2 text-3xl font-black ${style.text}`}
                             >
 
                               {String(
-                                analysis.recommendation
+                                optimization.recommendation
                               ).toUpperCase()}
 
                             </h3>
@@ -1139,17 +1196,18 @@ function PricingIntelligence() {
 
                         </div>
 
+
                         <div className="rounded-xl border border-white/10 bg-black/20 px-5 py-3">
 
                           <p className="text-xs text-gray-500">
 
-                            AI pricing decision
+                            Optimization objective
 
                           </p>
 
-                          <p className={`mt-1 text-sm font-bold ${recommendationStyle.text}`}>
+                          <p className="mt-1 text-sm font-bold text-lime-300">
 
-                            Based on current signals
+                            MAXIMUM REVENUE
 
                           </p>
 
@@ -1165,12 +1223,12 @@ function PricingIntelligence() {
 
 
                 {/* ==================================================
-                    WHY THIS PRICE
+                    MODEL EXPLANATION
                 ================================================== */}
 
-                <div className="mt-7">
+                <div className="mt-7 rounded-[26px] border border-lime-300/15 bg-lime-300/[0.025] p-6 sm:p-7">
 
-                  <div className="mb-5 flex items-center gap-3">
+                  <div className="flex items-center gap-3">
 
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-300/10">
 
@@ -1182,13 +1240,13 @@ function PricingIntelligence() {
 
                       <p className="text-xs font-bold uppercase tracking-[0.25em] text-lime-300">
 
-                        Intelligence Explanation
+                        Optimization Logic
 
                       </p>
 
                       <h3 className="mt-1 text-2xl font-black">
 
-                        Why This Price?
+                        How PricePilot AI Decided
 
                       </h3>
 
@@ -1196,282 +1254,520 @@ function PricingIntelligence() {
 
                   </div>
 
+                  <p className="mt-5 max-w-4xl text-sm leading-7 text-gray-400">
 
-                  {/* Signal Cards */}
+                    The XGBoost price-response model evaluates
+                    multiple candidate prices around the current
+                    price. For every candidate, the model predicts
+                    expected units sold. PricePilot AI then
+                    calculates expected revenue and selects the
+                    candidate producing the highest predicted
+                    revenue.
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  </p>
 
+                  <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
 
-                    {/* Demand */}
+                    <div className="rounded-xl border border-white/5 bg-[#030604] p-4">
 
-                    <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-600">
 
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                          <TrendingUp className="h-5 w-5 text-lime-300" />
-
-                        </div>
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Demand Level
-
-                        </p>
-
-                      </div>
-
-                      <p className={`mt-5 text-2xl font-black ${getDemandStyle(analysis.demand_level).text}`}>
-
-                        {analysis.demand_level}
+                        Step 01
 
                       </p>
 
-                      <p className="mt-2 text-xs text-gray-600">
+                      <p className="mt-2 text-sm font-bold text-white">
 
-                        Index:{" "}
-
-                        {Number(
-                          analysis.demand_index
-                        ).toFixed(2)}
+                        Generate Candidate Prices
 
                       </p>
 
                     </div>
 
+                    <div className="rounded-xl border border-white/5 bg-[#030604] p-4">
 
-                    {/* Sales */}
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-600">
 
-                    <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
-
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                          <ShoppingCart className="h-5 w-5 text-lime-300" />
-
-                        </div>
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Sales Velocity
-
-                        </p>
-
-                      </div>
-
-                      <p className="mt-5 text-2xl font-black text-white">
-
-                        {analysis.sales_velocity}
+                        Step 02
 
                       </p>
 
-                      <p className="mt-2 text-xs text-gray-600">
+                      <p className="mt-2 text-sm font-bold text-white">
 
-                        {Number(
-                          analysis.units_sold
-                        ).toLocaleString("en-IN")}{" "}
-                        units sold
+                        Predict Demand
 
                       </p>
 
                     </div>
 
+                    <div className="rounded-xl border border-lime-300/20 bg-lime-300/[0.035] p-4">
 
-                    {/* Inventory */}
+                      <p className="text-xs font-bold uppercase tracking-widest text-lime-300">
 
-                    <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
-
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                          <Package className="h-5 w-5 text-lime-300" />
-
-                        </div>
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Inventory
-
-                        </p>
-
-                      </div>
-
-                      <p className="mt-5 text-2xl font-black text-white">
-
-                        {analysis.inventory_status}
+                        Step 03
 
                       </p>
 
-                      <p className="mt-2 text-xs text-gray-600">
+                      <p className="mt-2 text-sm font-bold text-lime-300">
 
-                        {Number(
-                          analysis.stock
-                        ).toLocaleString("en-IN")}{" "}
-                        units available
+                        Select Highest Revenue
 
                       </p>
-
-                    </div>
-
-
-                    {/* Discount */}
-
-                    <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
-
-                      <div className="flex items-center gap-3">
-
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                          <Percent className="h-5 w-5 text-lime-300" />
-
-                        </div>
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Discount
-
-                        </p>
-
-                      </div>
-
-                      <p className="mt-5 text-2xl font-black text-white">
-
-                        {Number(
-                          analysis.discount_pct
-                        ).toFixed(2)}%
-
-                      </p>
-
-                      <p className="mt-2 text-xs text-gray-600">
-
-                        Historical discount signal
-
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  {/* ==================================================
-                      BASE PRICE / CURRENT PRICE
-                  ================================================== */}
-
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-
-                    <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
-
-                      <div className="flex items-center gap-3">
-
-                        <IndianRupee className="h-5 w-5 text-lime-300" />
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Historical Base Price
-
-                        </p>
-
-                      </div>
-
-                      <p className="mt-4 text-3xl font-black text-white">
-
-                        ₹{formatCurrency(
-                          analysis.base_price
-                        )}
-
-                      </p>
-
-                    </div>
-
-
-                    <div className="rounded-2xl border border-lime-300/20 bg-lime-300/[0.035] p-5 shadow-[0_0_30px_rgba(163,230,53,0.05)]">
-
-                      <div className="flex items-center gap-3">
-
-                        <Gauge className="h-5 w-5 text-lime-300" />
-
-                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-
-                          Current Product Price
-
-                        </p>
-
-                      </div>
-
-                      <p className="mt-4 text-3xl font-black text-lime-300 drop-shadow-[0_0_13px_rgba(163,230,53,0.30)]">
-
-                        ₹{formatCurrency(
-                          analysis.current_price
-                        )}
-
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  {/* ==================================================
-                      REASONS
-                  ================================================== */}
-
-                  <div className="mt-5 rounded-[26px] border border-lime-300/15 bg-lime-300/[0.025] p-6 sm:p-7">
-
-                    <div className="flex items-center gap-3">
-
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
-
-                        <Sparkles className="h-5 w-5 text-lime-300" />
-
-                      </div>
-
-                      <p className="text-sm font-bold uppercase tracking-[0.2em] text-lime-300">
-
-                        Key Pricing Factors
-
-                      </p>
-
-                    </div>
-
-
-                    <div className="mt-6 space-y-4">
-
-                      {Array.isArray(
-                        analysis.reasons
-                      ) && analysis.reasons.map(
-                        (reason, index) => (
-
-                          <div
-                            key={index}
-                            className="flex items-start gap-4 rounded-xl border border-white/5 bg-[#030604]/70 px-5 py-4"
-                          >
-
-                            <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lime-300/10">
-
-                              <CheckCircle2 className="h-4 w-4 text-lime-300" />
-
-                            </div>
-
-                            <p className="text-sm leading-6 text-gray-400">
-
-                              {reason}
-
-                            </p>
-
-                          </div>
-
-                        )
-                      )}
 
                     </div>
 
                   </div>
 
                 </div>
+
+
+                {/* ==================================================
+                    CANDIDATE PRICE ANALYSIS
+                ================================================== */}
+
+                {Array.isArray(
+                  optimization.candidates
+                ) && optimization.candidates.length > 0 && (
+
+                  <div className="mt-7">
+
+                    <div className="mb-5 flex items-center gap-3">
+
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-300/10">
+
+                        <BarChart3 className="h-5 w-5 text-lime-300" />
+
+                      </div>
+
+                      <div>
+
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-lime-300">
+
+                          Candidate Price Search
+
+                        </p>
+
+                        <h3 className="mt-1 text-2xl font-black">
+
+                          Revenue Across Price Points
+
+                        </h3>
+
+                      </div>
+
+                    </div>
+
+
+                    <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#030604]">
+
+                      <div className="overflow-x-auto">
+
+                        <table className="w-full min-w-[700px]">
+
+                          <thead>
+
+                            <tr className="border-b border-white/10 bg-[#071009]">
+
+                              <th className="px-6 py-5 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+
+                                Candidate Price
+
+                              </th>
+
+                              <th className="px-6 py-5 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+
+                                Predicted Units
+
+                              </th>
+
+                              <th className="px-6 py-5 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+
+                                Predicted Revenue
+
+                              </th>
+
+                              <th className="px-6 py-5 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
+
+                                Status
+
+                              </th>
+
+                            </tr>
+
+                          </thead>
+
+                          <tbody>
+
+                            {optimization.candidates.map(
+                              (candidate, index) => {
+
+                                const isBest =
+                                  Number(
+                                    candidate.candidate_price
+                                  ) ===
+                                  Number(
+                                    optimization.recommended_price
+                                  );
+
+                                return (
+
+                                  <tr
+                                    key={index}
+                                    className={`border-b border-white/5 transition ${
+                                      isBest
+                                        ? "bg-lime-300/[0.06]"
+                                        : "hover:bg-white/[0.02]"
+                                    }`}
+                                  >
+
+                                    <td className="px-6 py-5">
+
+                                      <div className="flex items-center gap-3">
+
+                                        {isBest && (
+
+                                          <span className="h-2.5 w-2.5 rounded-full bg-lime-300 shadow-[0_0_12px_rgba(163,230,53,1)]" />
+
+                                        )}
+
+                                        <span
+                                          className={`font-black ${
+                                            isBest
+                                              ? "text-lime-300"
+                                              : "text-white"
+                                          }`}
+                                        >
+
+                                          ₹
+                                          {formatCurrency(
+                                            candidate.candidate_price
+                                          )}
+
+                                        </span>
+
+                                      </div>
+
+                                    </td>
+
+                                    <td className="px-6 py-5 text-sm font-semibold text-gray-400">
+
+                                      {Number(
+                                        candidate.predicted_units_sold
+                                      ).toLocaleString(
+                                        "en-IN",
+                                        {
+                                          maximumFractionDigits: 2,
+                                        }
+                                      )}
+
+                                    </td>
+
+                                    <td className="px-6 py-5">
+
+                                      <span
+                                        className={`font-black ${
+                                          isBest
+                                            ? "text-lime-300"
+                                            : "text-gray-300"
+                                        }`}
+                                      >
+
+                                        ₹
+                                        {formatCurrency(
+                                          candidate.predicted_revenue
+                                        )}
+
+                                      </span>
+
+                                    </td>
+
+                                    <td className="px-6 py-5">
+
+                                      {isBest ? (
+
+                                        <span className="inline-flex items-center gap-2 rounded-full border border-lime-300/30 bg-lime-300/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-lime-300">
+
+                                          <CheckCircle2 className="h-3.5 w-3.5" />
+
+                                          Best Revenue
+
+                                        </span>
+
+                                      ) : (
+
+                                        <span className="text-xs text-gray-600">
+
+                                          Tested
+
+                                        </span>
+
+                                      )}
+
+                                    </td>
+
+                                  </tr>
+
+                                );
+
+                              }
+                            )}
+
+                          </tbody>
+
+                        </table>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+
+                {/* ==================================================
+                    BUSINESS SIGNALS
+                ================================================== */}
+
+                {analysis && (
+
+                  <div className="mt-8">
+
+                    <div className="mb-5 flex items-center gap-3">
+
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime-300/10">
+
+                        <Brain className="h-5 w-5 text-lime-300" />
+
+                      </div>
+
+                      <div>
+
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-lime-300">
+
+                          Intelligence Explanation
+
+                        </p>
+
+                        <h3 className="mt-1 text-2xl font-black">
+
+                          Business Signals
+
+                        </h3>
+
+                      </div>
+
+                    </div>
+
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+
+                      {/* DEMAND */}
+
+                      <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
+
+                        <div className="flex items-center gap-3">
+
+                          <TrendingUp className="h-5 w-5 text-lime-300" />
+
+                          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+
+                            Demand Level
+
+                          </p>
+
+                        </div>
+
+                        <p
+                          className={`mt-5 text-2xl font-black ${
+                            getDemandStyle(
+                              analysis.demand_level
+                            ).text
+                          }`}
+                        >
+
+                          {analysis.demand_level}
+
+                        </p>
+
+                        <p className="mt-2 text-xs text-gray-600">
+
+                          Index:{" "}
+
+                          {Number(
+                            analysis.demand_index
+                          ).toFixed(2)}
+
+                        </p>
+
+                      </div>
+
+
+                      {/* SALES */}
+
+                      <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
+
+                        <div className="flex items-center gap-3">
+
+                          <ShoppingCart className="h-5 w-5 text-lime-300" />
+
+                          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+
+                            Sales Velocity
+
+                          </p>
+
+                        </div>
+
+                        <p className="mt-5 text-2xl font-black">
+
+                          {analysis.sales_velocity}
+
+                        </p>
+
+                        <p className="mt-2 text-xs text-gray-600">
+
+                          {Number(
+                            analysis.units_sold
+                          ).toLocaleString(
+                            "en-IN"
+                          )}{" "}
+                          units sold
+
+                        </p>
+
+                      </div>
+
+
+                      {/* INVENTORY */}
+
+                      <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
+
+                        <div className="flex items-center gap-3">
+
+                          <Package className="h-5 w-5 text-lime-300" />
+
+                          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+
+                            Inventory
+
+                          </p>
+
+                        </div>
+
+                        <p className="mt-5 text-2xl font-black">
+
+                          {analysis.inventory_status}
+
+                        </p>
+
+                        <p className="mt-2 text-xs text-gray-600">
+
+                          {Number(
+                            analysis.stock
+                          ).toLocaleString(
+                            "en-IN"
+                          )}{" "}
+                          units available
+
+                        </p>
+
+                      </div>
+
+
+                      {/* DISCOUNT */}
+
+                      <div className="rounded-2xl border border-white/10 bg-[#030604] p-5">
+
+                        <div className="flex items-center gap-3">
+
+                          <Percent className="h-5 w-5 text-lime-300" />
+
+                          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+
+                            Discount
+
+                          </p>
+
+                        </div>
+
+                        <p className="mt-5 text-2xl font-black">
+
+                          {Number(
+                            analysis.discount_pct
+                          ).toFixed(2)}%
+
+                        </p>
+
+                        <p className="mt-2 text-xs text-gray-600">
+
+                          Historical discount signal
+
+                        </p>
+
+                      </div>
+
+                    </div>
+
+
+                    {/* REASONS */}
+
+                    {Array.isArray(
+                      analysis.reasons
+                    ) && (
+
+                      <div className="mt-5 rounded-[26px] border border-lime-300/15 bg-lime-300/[0.025] p-6 sm:p-7">
+
+                        <div className="flex items-center gap-3">
+
+                          <Sparkles className="h-5 w-5 text-lime-300" />
+
+                          <p className="text-sm font-bold uppercase tracking-[0.2em] text-lime-300">
+
+                            Key Pricing Factors
+
+                          </p>
+
+                        </div>
+
+
+                        <div className="mt-6 space-y-4">
+
+                          {analysis.reasons.map(
+                            (reason, index) => (
+
+                              <div
+                                key={index}
+                                className="flex items-start gap-4 rounded-xl border border-white/5 bg-[#030604]/70 px-5 py-4"
+                              >
+
+                                <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-lime-300/10">
+
+                                  <CheckCircle2 className="h-4 w-4 text-lime-300" />
+
+                                </div>
+
+                                <p className="text-sm leading-6 text-gray-400">
+
+                                  {reason}
+
+                                </p>
+
+                              </div>
+
+                            )
+                          )}
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                  </div>
+
+                )}
 
               </div>
 
@@ -1486,31 +1782,36 @@ function PricingIntelligence() {
             EMPTY STATE
         ================================================== */}
 
-        {!analysis &&
-          !analysisLoading &&
+        {!optimization &&
+          !optimizationLoading &&
           selectedProduct && (
 
             <section className="mt-7 rounded-[28px] border border-dashed border-lime-300/20 bg-[#071009] px-7 py-10 text-center">
 
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-lime-300/10">
 
-                <Zap className="h-7 w-7 text-lime-300" />
+                <Target className="h-7 w-7 text-lime-300" />
 
               </div>
 
               <h3 className="mt-5 text-xl font-bold">
 
-                Ready to Analyze
+                Ready for Revenue Optimization
 
               </h3>
 
               <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-600">
 
-                Select a product above and click
+                Select a product above and click{" "}
+
                 <span className="font-semibold text-lime-300">
-                  {" "}Analyze Pricing
+
+                  Optimize Price
+
                 </span>
-                {" "}to generate an ML-powered pricing recommendation.
+
+                {" "}to test candidate prices and identify
+                the price with the highest predicted revenue.
 
               </p>
 
@@ -1527,7 +1828,7 @@ function PricingIntelligence() {
 
           <span>
 
-            PricePilot AI · Pricing Intelligence
+            PricePilot AI · Revenue Intelligence
 
           </span>
 
@@ -1535,7 +1836,7 @@ function PricingIntelligence() {
 
             <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_10px_rgba(163,230,53,0.8)]" />
 
-            Product Pricing Engine Active
+            XGBoost Price Response Engine Active
 
           </span>
 
@@ -1550,4 +1851,5 @@ function PricingIntelligence() {
 
 
 export default PricingIntelligence;
+
 

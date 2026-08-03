@@ -1,3 +1,4 @@
+/*Previously Dashboards page now updated as Product management page*/
 import { useState } from "react";
 
 import Sidebar from "../components/layout/Sidebar";
