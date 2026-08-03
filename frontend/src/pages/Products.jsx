@@ -1,3 +1,4 @@
+/*Previously Products page, now Analysis Dashboards Page*/
 import { useEffect, useMemo, useState } from "react";
 
 import {
