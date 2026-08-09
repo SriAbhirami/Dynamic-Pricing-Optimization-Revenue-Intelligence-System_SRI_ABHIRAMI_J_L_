@@ -66,6 +66,68 @@ CUSTOMER_DATA_PATH = os.path.join(
 
 
 # ============================================================
+# CANDIDATE PRICE RANGE - DATA-GROUNDED
+# ============================================================
+#
+# The training dataset (retail_pricing_demand_100k.csv) only
+# ever contains price_change_pct values between -50% and 0%.
+# In other words: current_price is NEVER above base_price
+# anywhere in 172,800 historical rows. The model has literally
+# never seen a price increase during training.
+#
+# XGBoost (and tree models generally) cannot extrapolate
+# reliably outside the range of values they were trained on -
+# predictions for out-of-range inputs collapse toward the
+# value of whichever leaf the input falls into, which is why
+# earlier versions of this system swung between recommending
+# ~+20% (unconstrained extrapolation bias) and, after a fixed
+# elasticity formula was hard-coded on top of the model,
+# almost always -40% (see predict_candidate() below - that
+# hard-coded formula has been removed).
+#
+# To keep recommendations inside a region the model can speak
+# to with reasonable confidence, and to avoid the optimizer
+# being forced toward an arbitrary boundary, the candidate
+# range is:
+#
+#   -20%  ->  solidly inside the observed data (25th
+#              percentile of historical price_change_pct is
+#              exactly -20%), so the model has plenty of
+#              real examples here.
+#
+#   +15%  ->  a modest excursion above the never-discounted
+#              (0%) ceiling seen in training. The trained
+#              model has a monotonic constraint forcing
+#              demand to fall (not rise) as price rises, so
+#              this direction is safe even beyond the training
+#              range; +15% keeps the *magnitude* of that
+#              extrapolation small instead of the previous
+#              +/-40%, which pushed the model far outside
+#              anything it had ever seen.
+#
+# This still lets the optimizer choose "increase", "maintain"
+# or "decrease" - it is no longer forced to hit either edge.
+# ============================================================
+
+CANDIDATE_MIN_PCT = -20
+CANDIDATE_MAX_PCT = 15
+CANDIDATE_STEP_PCT = 1
+
+# Minimum predicted-revenue improvement (relative to the
+# current price) required before the optimizer will recommend
+# moving away from the current price at all. This stops the
+# optimizer from chasing noise-level model differences and
+# lets "MAINTAIN PRICE" be a genuine, reachable outcome.
+MIN_REVENUE_IMPROVEMENT_PCT = 1.0
+
+# Business guard: how far the optimizer is allowed to discount
+# when demand is strong and inventory is limited/out of stock.
+# This is an explicit, explained business constraint (not a
+# fake ML output) - see select_best_candidate().
+HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT = -8
+
+
+# ============================================================
 # LOAD PRICE RESPONSE MODEL
 # ============================================================
 
@@ -962,62 +1024,47 @@ def predict_candidate(
     # ========================================================
     # PREDICT
     # ========================================================
+    #
+    # IMPORTANT: We use the trained price-response model's own
+    # prediction directly, for every candidate price. There is
+    # no hard-coded elasticity formula overriding it.
+    #
+    # A previous version of this function replaced the model's
+    # prediction with a fixed formula
+    # (predicted_units = current_units * price_ratio**-1.5)
+    # whenever the candidate price differed from the current
+    # price. That formula makes predicted revenue
+    # (price * predicted_units) a strictly decreasing function
+    # of price for every product, with no dependence on the
+    # product's actual category, demand, or inventory signals -
+    # which is why the optimizer always ended up recommending
+    # the lowest boundary of the candidate range (-40%). It has
+    # been removed so the model's own (monotonic-constrained,
+    # category- and customer-behaviour-aware) prediction drives
+    # the recommendation instead.
+    # ========================================================
 
     predicted_units = float(model.predict(processed_data)[0])
 
     # ========================================================
-    # FIX: Apply price elasticity constraints
+    # SANITY CAP - transparent business guard, not a fake
+    # ML prediction.
+    #
+    # The training data's units_sold values are bounded (see
+    # scripts/train_price_response.py print-outs). To protect
+    # against a pathological prediction for an out-of-range
+    # candidate, we cap predicted demand at a generous multiple
+    # of this category's own historical average units sold.
+    # This only ever clips extreme outliers; it does not shape
+    # the demand curve itself.
     # ========================================================
 
-    if candidate_price != current_price:
-        try:
-            # Calculate what demand would be at current price
-            current_input_data = build_model_input(
-                product=product,
-                latest_category_data=latest_category_data,
-                average_base_price=average_base_price,
-                average_units_sold=average_units_sold,
-                average_inventory=average_inventory,
-                average_demand_index=average_demand_index,
-                current_price=current_price,
-                candidate_price=current_price,
-            )
-            
-            current_processed = preprocessor.transform(current_input_data)
-            current_units = float(model.predict(current_processed)[0])
-            
-            # Protect against zero or negative
-            if current_units <= 0:
-                current_units = 50.0  # Fallback
-            
-            # Apply elasticity: demand decreases when price increases
-            price_ratio = candidate_price / current_price
-            
-            # Elasticity factor (1.2 = 20% demand change per 10% price change)
-            elasticity = 1.5
-            predicted_units = current_units * (price_ratio ** (-elasticity))
-            
-            # Ensure we don't get unrealistic numbers
-            predicted_units = max(0.1, predicted_units)
-            
-        except Exception as e:
-            # If elasticity calculation fails, use a simple rule
-            print(f"Elasticity calculation failed: {e}")
-            if candidate_price > current_price:
-                predicted_units = predicted_units * 0.85  # Reduce demand
-            else:
-                predicted_units = predicted_units * 1.15  # Increase demand
+    if average_units_sold and average_units_sold > 0:
+        sanity_cap = max(average_units_sold * 5, 50)
+    else:
+        sanity_cap = 10000
 
-    # ========================================================
-    # ENSURE PREDICTED UNITS ARE REASONABLE
-    # ========================================================
-
-    predicted_units = max(0.0, predicted_units)
-
-    # Cap at reasonable maximum (prevent unrealistic predictions)
-    max_units = 10000
-    if predicted_units > max_units:
-        predicted_units = max_units
+    predicted_units = max(0.0, min(predicted_units, sanity_cap))
 
     predicted_revenue = candidate_price * predicted_units
 
@@ -1037,6 +1084,123 @@ def predict_candidate(
         predicted_units,
         predicted_revenue,
     )
+
+
+# ============================================================
+# SELECT BEST CANDIDATE - BUSINESS-AWARE OPTIMIZATION
+# ============================================================
+#
+# Plain revenue-argmax over a wide candidate grid is what
+# caused the system to repeatedly hit a boundary. This
+# function keeps predicted revenue as the primary signal, but
+# applies two transparent, explainable business constraints on
+# top of it instead of trusting a single number blindly:
+#
+# 1. MINIMUM IMPROVEMENT THRESHOLD
+#    A candidate other than the current price must beat the
+#    current price's predicted revenue by more than
+#    MIN_REVENUE_IMPROVEMENT_PCT before it is preferred. This
+#    stops the optimizer from moving the price for a
+#    fraction-of-a-percent difference that is well within the
+#    model's own noise, and makes "MAINTAIN PRICE" a reachable,
+#    genuine outcome rather than a coincidence.
+#
+# 2. HIGH-DEMAND / LOW-INVENTORY DISCOUNT GUARD
+#    If a product has strong historical demand (demand_index)
+#    AND limited/out-of-stock inventory, deep discounting is
+#    poor business practice even if the model's revenue curve
+#    (extrapolating from average, not scarcity-aware, training
+#    data) suggests a large discount looks attractive. In that
+#    situation, candidates below
+#    HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT are excluded from
+#    consideration. This mirrors the business rule requested:
+#    "high demand + low inventory should generally not result
+#    in a huge discount."
+#
+# No product ever has its price forced to a hardcoded value -
+# this only narrows or reorders which of the model's own
+# candidate predictions are eligible to win.
+# ============================================================
+
+def select_best_candidate(
+    candidates,
+    current_price,
+    average_demand_index,
+    stock,
+):
+
+    # --------------------------------------------------------
+    # Locate the candidate closest to the current price, to use
+    # as the revenue baseline.
+    # --------------------------------------------------------
+
+    current_candidate = min(
+        candidates,
+        key=lambda item: abs(item.candidate_price - current_price),
+    )
+
+    baseline_revenue = current_candidate.predicted_revenue
+
+    # --------------------------------------------------------
+    # Apply the high-demand / low-inventory discount guard.
+    # --------------------------------------------------------
+
+    is_high_demand = average_demand_index >= 200
+    is_low_inventory = stock <= 50
+
+    eligible_candidates = []
+
+    for candidate in candidates:
+
+        candidate_change_pct = (
+            (candidate.candidate_price - current_price)
+            / current_price
+            * 100
+        )
+
+        if (
+            is_high_demand
+            and is_low_inventory
+            and candidate_change_pct < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
+        ):
+            continue
+
+        eligible_candidates.append(candidate)
+
+    if not eligible_candidates:
+        eligible_candidates = candidates
+
+    # --------------------------------------------------------
+    # Pick the eligible candidate with the highest predicted
+    # revenue.
+    # --------------------------------------------------------
+
+    best_candidate = max(
+        eligible_candidates,
+        key=lambda item: item.predicted_revenue,
+    )
+
+    # --------------------------------------------------------
+    # Apply the minimum-improvement threshold: only move away
+    # from the current price if the improvement is decisive.
+    # --------------------------------------------------------
+
+    if baseline_revenue > 0:
+
+        improvement_pct = (
+            (best_candidate.predicted_revenue - baseline_revenue)
+            / baseline_revenue
+            * 100
+        )
+
+    else:
+
+        improvement_pct = 0.0
+
+    if improvement_pct < MIN_REVENUE_IMPROVEMENT_PCT:
+        return current_candidate
+
+    return best_candidate
 
 
 # ============================================================
@@ -1230,15 +1394,17 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 4. CANDIDATE PRICES - WIDER RANGE
+        # 4. CANDIDATE PRICES - DATA-GROUNDED RANGE
         # ====================================================
 
-        # Test from -40% to +40% for better optimization
+        # See CANDIDATE_MIN_PCT / CANDIDATE_MAX_PCT definition
+        # above for why this range was chosen instead of the
+        # previous +/-40%.
         candidate_percentages = list(
             range(
-                -40,  # Wider range
-                41,   # Wider range
-                1,
+                CANDIDATE_MIN_PCT,
+                CANDIDATE_MAX_PCT + 1,
+                CANDIDATE_STEP_PCT,
             )
         )
 
@@ -1323,13 +1489,14 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 6. FIND HIGHEST REVENUE
+        # 6. SELECT BEST CANDIDATE (BUSINESS-AWARE)
         # ====================================================
 
-        best_candidate = max(
-            candidates,
-            key=lambda item:
-                item.predicted_revenue,
+        best_candidate = select_best_candidate(
+            candidates=candidates,
+            current_price=current_price,
+            average_demand_index=average_demand_index,
+            stock=product.stock,
         )
 
         recommended_price = (
@@ -1444,16 +1611,32 @@ def optimize_product_price(
                 "this product category."
             )
 
+        magnitude = abs(price_change_percentage)
+
+        if magnitude < 5:
+            magnitude_text = "slight"
+        elif magnitude < 10:
+            magnitude_text = "moderate"
+        else:
+            magnitude_text = "significant"
+
+        range_text = (
+            f"{CANDIDATE_MIN_PCT}% to +{CANDIDATE_MAX_PCT}%"
+        )
+
         if price_change_percentage > 0:
 
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-40% to +40%. "
+                f"{range_text}. "
                 f"{signal_text} "
-                f"The highest predicted revenue occurs at "
-                f"₹{recommended_price:.2f}, representing a "
-                f"{price_change_percentage:.2f}% price increase. "
+                f"The highest predicted revenue among eligible "
+                f"candidates occurs at ₹{recommended_price:.2f}, "
+                f"a {magnitude_text} "
+                f"{price_change_percentage:.2f}% price increase "
+                f"that beats the current price's predicted revenue "
+                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}%. "
                 f"The model predicts {expected_units:.2f} units "
                 f"sold at this price, compared with approximately "
                 f"{current_estimated_units:.2f} units at the "
@@ -1465,13 +1648,16 @@ def optimize_product_price(
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-40% to +40%. "
+                f"{range_text}. "
                 f"{signal_text} "
-                f"The highest predicted revenue occurs at "
-                f"₹{recommended_price:.2f}, representing a "
-                f"{abs(price_change_percentage):.2f}% price decrease. "
+                f"The highest predicted revenue among eligible "
+                f"candidates occurs at ₹{recommended_price:.2f}, "
+                f"a {magnitude_text} "
+                f"{abs(price_change_percentage):.2f}% price decrease "
+                f"that beats the current price's predicted revenue "
+                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}%. "
                 f"The lower price is expected to support stronger "
-                f"demand and maximize predicted revenue."
+                f"demand and improve predicted revenue."
             )
 
         else:
@@ -1479,10 +1665,12 @@ def optimize_product_price(
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-40% to +40%. "
+                f"{range_text}. "
                 f"{signal_text} "
-                f"The current price produced the highest "
-                f"predicted revenue among all tested prices."
+                f"No candidate price improved predicted revenue "
+                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}% "
+                f"over the current price, so the current price is "
+                f"kept."
             )
 
         # ====================================================
@@ -1729,14 +1917,17 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 3. GENERATE CANDIDATES - WIDER RANGE
+        # 3. GENERATE CANDIDATES - DATA-GROUNDED RANGE
         # ====================================================
 
+        # See CANDIDATE_MIN_PCT / CANDIDATE_MAX_PCT definition
+        # near the top of this file for why this range was
+        # chosen instead of the previous +/-40%.
         candidate_percentages = list(
             range(
-                -40,  # Wider range
-                41,   # Wider range
-                1,
+                CANDIDATE_MIN_PCT,
+                CANDIDATE_MAX_PCT + 1,
+                CANDIDATE_STEP_PCT,
             )
         )
 
@@ -1791,14 +1982,61 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 4. BEST PRICE
+        # 4. BEST PRICE (BUSINESS-AWARE)
+        # ====================================================
+        #
+        # Same two guards as select_best_candidate() above,
+        # applied here to the dict-based candidate list used
+        # by this endpoint:
+        #   1. High-demand + low-inventory discount guard
+        #   2. Minimum revenue-improvement threshold
         # ====================================================
 
-        best_candidate = max(
+        current_candidate_dict = min(
             candidates,
+            key=lambda item: abs(item["price"] - current_price),
+        )
+
+        baseline_revenue = current_candidate_dict["revenue"]
+
+        is_high_demand = average_demand_index >= 200
+        is_low_inventory = stock <= 50
+
+        eligible_candidates = [
+            item
+            for item in candidates
+            if not (
+                is_high_demand
+                and is_low_inventory
+                and item["percentage"] < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
+            )
+        ]
+
+        if not eligible_candidates:
+            eligible_candidates = candidates
+
+        revenue_best_candidate = max(
+            eligible_candidates,
             key=lambda item:
                 item["revenue"],
         )
+
+        if baseline_revenue > 0:
+
+            improvement_pct = (
+                (revenue_best_candidate["revenue"] - baseline_revenue)
+                / baseline_revenue
+                * 100
+            )
+
+        else:
+
+            improvement_pct = 0.0
+
+        if improvement_pct < MIN_REVENUE_IMPROVEMENT_PCT:
+            best_candidate = current_candidate_dict
+        else:
+            best_candidate = revenue_best_candidate
 
         predicted_price = (
             best_candidate["price"]
