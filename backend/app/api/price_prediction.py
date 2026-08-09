@@ -200,46 +200,38 @@ try:
 
     # --------------------------------------------------------
     # GLOBAL customer behaviour
-    #
-    # Used when a category does not exist historically.
     # --------------------------------------------------------
 
     customer_global_defaults = {
 
         "customer_avg_age":
             float(
-                customer_df["Age"]
-                .mean()
+                customer_df["Age"].mean()
             ),
 
         "customer_avg_unit_price":
             float(
-                customer_df["Unit_Price"]
-                .mean()
+                customer_df["Unit_Price"].mean()
             ),
 
         "customer_avg_quantity":
             float(
-                customer_df["Quantity"]
-                .mean()
+                customer_df["Quantity"].mean()
             ),
 
         "customer_avg_discount_amount":
             float(
-                customer_df["Discount_Amount"]
-                .mean()
+                customer_df["Discount_Amount"].mean()
             ),
 
         "customer_avg_order_value":
             float(
-                customer_df["Total_Amount"]
-                .mean()
+                customer_df["Total_Amount"].mean()
             ),
 
         "customer_returning_rate":
             float(
-                customer_df["Is_Returning_Customer"]
-                .mean()
+                customer_df["Is_Returning_Customer"].mean()
             ),
 
         "customer_avg_session_duration":
@@ -272,8 +264,7 @@ try:
 
         "customer_order_count":
             float(
-                customer_df["Order_ID"]
-                .count()
+                customer_df["Order_ID"].count()
             ),
     }
 
@@ -297,7 +288,6 @@ except Exception as error:
 # RESPONSE SCHEMAS
 # ============================================================
 
-
 class PriceCandidate(BaseModel):
 
     candidate_price: float
@@ -305,6 +295,15 @@ class PriceCandidate(BaseModel):
     predicted_units_sold: float
 
     predicted_revenue: float
+
+
+class PricingFactor(BaseModel):
+
+    factor: str
+
+    value: str
+
+    impact: str
 
 
 class PriceOptimizationResponse(BaseModel):
@@ -332,6 +331,8 @@ class PriceOptimizationResponse(BaseModel):
     recommendation: str
 
     explanation: str
+
+    pricing_factors: list[PricingFactor]
 
 
 class ProductPricingAnalysisResponse(BaseModel):
@@ -371,7 +372,7 @@ class ProductPricingAnalysisResponse(BaseModel):
 
 
 # ============================================================
-# BUILD MODEL INPUT
+# BUILD MODEL INPUT - FIXED
 # ============================================================
 
 def build_model_input(
@@ -397,35 +398,27 @@ def build_model_input(
         category = "unknown"
 
     # ========================================================
-    # PRICE RESPONSE FEATURES
+    # PRICE RESPONSE FEATURES - FIXED
     # ========================================================
 
-    if average_base_price > 0:
+    # Use the actual current price as reference
+    reference_price = current_price
 
-        price_ratio = (
-            candidate_price
-            / average_base_price
-        )
+    if reference_price <= 0:
+        reference_price = candidate_price
 
-        effective_discount_pct = (
-            1 - price_ratio
-        ) * 100
+    price_ratio = candidate_price / reference_price
 
-    else:
-
-        price_ratio = 1.0
-
-        effective_discount_pct = 0.0
+    effective_discount_pct = (
+        (reference_price - candidate_price)
+        / reference_price
+    ) * 100
 
     # ========================================================
     # CUSTOMER BEHAVIOUR FEATURES
     # ========================================================
 
     customer_features = {}
-
-    # --------------------------------------------------------
-    # First try category-specific customer behaviour
-    # --------------------------------------------------------
 
     if customer_behavior is not None:
 
@@ -503,9 +496,6 @@ def build_model_input(
 
     # ========================================================
     # FALLBACK CUSTOMER VALUES
-    #
-    # If the product category is completely new,
-    # use overall customer behaviour.
     # ========================================================
 
     if not customer_features:
@@ -600,26 +590,19 @@ def build_model_input(
         promotion_type = "unknown"
 
     # ========================================================
-    # BUILD MODEL INPUT ROW
+    # BUILD MODEL INPUT ROW - FIXED current_price
     # ========================================================
 
     input_row = {
 
         # ----------------------------------------------------
-        # PRICE FEATURES
+        # PRICE FEATURES - FIXED
         # ----------------------------------------------------
 
-        "current_price":
-            candidate_price,
-
-        "base_price":
-            average_base_price,
-
-        "price_ratio":
-            price_ratio,
-
-        "effective_discount_pct":
-            effective_discount_pct,
+        "current_price": current_price,  # FIXED: Use actual current price, not candidate
+        "base_price": average_base_price,
+        "price_ratio": price_ratio,
+        "effective_discount_pct": effective_discount_pct,
 
         # ----------------------------------------------------
         # INVENTORY FEATURES
@@ -649,10 +632,6 @@ def build_model_input(
 
         # ----------------------------------------------------
         # CATEGORICAL FEATURES
-        #
-        # IMPORTANT:
-        # Use the ACTUAL product ID.
-        # Do NOT use latest_category_data.product_id.
         # ----------------------------------------------------
 
         "product_id":
@@ -829,9 +808,6 @@ def get_category_signals(
 
     # ========================================================
     # 4. CATEGORY NOT FOUND
-    #
-    # IMPORTANT FALLBACK:
-    # Use overall historical averages from ALL products.
     # ========================================================
 
     print(
@@ -952,7 +928,7 @@ def get_category_signals(
 
 
 # ============================================================
-# PREDICT ONE PRICE CANDIDATE
+# PREDICT ONE PRICE CANDIDATE - FIXED WITH ELASTICITY
 # ============================================================
 
 def predict_candidate(
@@ -967,51 +943,94 @@ def predict_candidate(
 ):
 
     input_data = build_model_input(
-
         product=product,
-
-        latest_category_data=
-            latest_category_data,
-
-        average_base_price=
-            average_base_price,
-
-        average_units_sold=
-            average_units_sold,
-
-        average_inventory=
-            average_inventory,
-
-        average_demand_index=
-            average_demand_index,
-
-        current_price=
-            current_price,
-
-        candidate_price=
-            candidate_price,
+        latest_category_data=latest_category_data,
+        average_base_price=average_base_price,
+        average_units_sold=average_units_sold,
+        average_inventory=average_inventory,
+        average_demand_index=average_demand_index,
+        current_price=current_price,
+        candidate_price=candidate_price,
     )
 
-    processed_data = (
-        preprocessor.transform(
-            input_data
-        )
-    )
+    # ========================================================
+    # PREPROCESS
+    # ========================================================
 
-    predicted_units = float(
-        model.predict(
-            processed_data
-        )[0]
-    )
+    processed_data = preprocessor.transform(input_data)
 
-    predicted_units = max(
-        0.0,
-        predicted_units,
-    )
+    # ========================================================
+    # PREDICT
+    # ========================================================
 
-    predicted_revenue = (
-        candidate_price
-        * predicted_units
+    predicted_units = float(model.predict(processed_data)[0])
+
+    # ========================================================
+    # FIX: Apply price elasticity constraints
+    # ========================================================
+
+    if candidate_price != current_price:
+        try:
+            # Calculate what demand would be at current price
+            current_input_data = build_model_input(
+                product=product,
+                latest_category_data=latest_category_data,
+                average_base_price=average_base_price,
+                average_units_sold=average_units_sold,
+                average_inventory=average_inventory,
+                average_demand_index=average_demand_index,
+                current_price=current_price,
+                candidate_price=current_price,
+            )
+            
+            current_processed = preprocessor.transform(current_input_data)
+            current_units = float(model.predict(current_processed)[0])
+            
+            # Protect against zero or negative
+            if current_units <= 0:
+                current_units = 50.0  # Fallback
+            
+            # Apply elasticity: demand decreases when price increases
+            price_ratio = candidate_price / current_price
+            
+            # Elasticity factor (1.2 = 20% demand change per 10% price change)
+            elasticity = 1.5
+            predicted_units = current_units * (price_ratio ** (-elasticity))
+            
+            # Ensure we don't get unrealistic numbers
+            predicted_units = max(0.1, predicted_units)
+            
+        except Exception as e:
+            # If elasticity calculation fails, use a simple rule
+            print(f"Elasticity calculation failed: {e}")
+            if candidate_price > current_price:
+                predicted_units = predicted_units * 0.85  # Reduce demand
+            else:
+                predicted_units = predicted_units * 1.15  # Increase demand
+
+    # ========================================================
+    # ENSURE PREDICTED UNITS ARE REASONABLE
+    # ========================================================
+
+    predicted_units = max(0.0, predicted_units)
+
+    # Cap at reasonable maximum (prevent unrealistic predictions)
+    max_units = 10000
+    if predicted_units > max_units:
+        predicted_units = max_units
+
+    predicted_revenue = candidate_price * predicted_units
+
+    # ========================================================
+    # DEBUG LOGGING
+    # ========================================================
+
+    print(
+        f"[PRICE DEBUG] "
+        f"Current={current_price:.2f} | "
+        f"Candidate={candidate_price:.2f} | "
+        f"Units={predicted_units:.2f} | "
+        f"Revenue={predicted_revenue:.2f}"
     )
 
     return (
@@ -1021,7 +1040,119 @@ def predict_candidate(
 
 
 # ============================================================
-# PRICE OPTIMIZATION ENDPOINT
+# BUILD PRICING FACTORS
+# ============================================================
+
+def build_pricing_factors(
+    product,
+    average_demand_index,
+    average_units_sold,
+    average_inventory,
+    average_discount_pct,
+    current_price,
+    recommended_price,
+):
+
+    factors = []
+
+    # Demand
+    if average_demand_index >= 200:
+
+        factors.append(
+            PricingFactor(
+                factor="Demand",
+                value=f"{average_demand_index:.2f}",
+                impact="High demand supports higher pricing."
+            )
+        )
+
+    elif average_demand_index >= 100:
+
+        factors.append(
+            PricingFactor(
+                factor="Demand",
+                value=f"{average_demand_index:.2f}",
+                impact="Moderate demand supports current pricing."
+            )
+        )
+
+    else:
+
+        factors.append(
+            PricingFactor(
+                factor="Demand",
+                value=f"{average_demand_index:.2f}",
+                impact="Lower demand favors competitive pricing."
+            )
+        )
+
+    # Inventory
+    factors.append(
+        PricingFactor(
+            factor="Inventory",
+            value=str(average_inventory),
+            impact=(
+                "Healthy inventory."
+                if average_inventory > 150
+                else "Limited inventory."
+            ),
+        )
+    )
+
+    # Sales
+    factors.append(
+        PricingFactor(
+            factor="Average Units Sold",
+            value=str(average_units_sold),
+            impact=(
+                "Strong sales."
+                if average_units_sold >= 500
+                else "Moderate sales."
+                if average_units_sold >= 200
+                else "Lower sales."
+            ),
+        )
+    )
+
+    # Discount
+    factors.append(
+        PricingFactor(
+            factor="Historical Discount",
+            value=f"{average_discount_pct:.2f}%",
+            impact=(
+                "Heavy discounting observed."
+                if average_discount_pct > 10
+                else "Limited discounting."
+            ),
+        )
+    )
+
+    # Price recommendation
+    change = (
+        (recommended_price - current_price)
+        / current_price
+        * 100
+    )
+
+    factors.append(
+        PricingFactor(
+            factor="Recommended Price Change",
+            value=f"{change:.2f}%",
+            impact=(
+                "Increase price"
+                if change > 0
+                else "Decrease price"
+                if change < 0
+                else "Maintain price"
+            ),
+        )
+    )
+
+    return factors
+
+
+# ============================================================
+# PRICE OPTIMIZATION ENDPOINT - FIXED WITH WIDER RANGE
 # ============================================================
 
 @router.get(
@@ -1099,13 +1230,14 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 4. CANDIDATE PRICES
+        # 4. CANDIDATE PRICES - WIDER RANGE
         # ====================================================
 
+        # Test from -40% to +40% for better optimization
         candidate_percentages = list(
             range(
-                -20,
-                21,
+                -40,  # Wider range
+                41,   # Wider range
                 1,
             )
         )
@@ -1317,7 +1449,7 @@ def optimize_product_price(
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-20% to +20%. "
+                f"-40% to +40%. "
                 f"{signal_text} "
                 f"The highest predicted revenue occurs at "
                 f"₹{recommended_price:.2f}, representing a "
@@ -1333,7 +1465,7 @@ def optimize_product_price(
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-20% to +20%. "
+                f"-40% to +40%. "
                 f"{signal_text} "
                 f"The highest predicted revenue occurs at "
                 f"₹{recommended_price:.2f}, representing a "
@@ -1347,14 +1479,35 @@ def optimize_product_price(
             explanation = (
                 f"The optimization engine evaluated "
                 f"{len(candidates)} candidate prices from "
-                f"-20% to +20%. "
+                f"-40% to +40%. "
                 f"{signal_text} "
                 f"The current price produced the highest "
                 f"predicted revenue among all tested prices."
             )
 
         # ====================================================
-        # 12. PRINT RESULT
+        # 12. PRICING FACTORS
+        # ====================================================
+
+        pricing_factors = build_pricing_factors(
+
+            product=product,
+
+            average_demand_index=average_demand_index,
+
+            average_units_sold=average_units_sold,
+
+            average_inventory=average_inventory,
+
+            average_discount_pct=average_discount_pct,
+
+            current_price=current_price,
+
+            recommended_price=recommended_price,
+        )
+
+        # ====================================================
+        # 13. PRINT RESULT
         # ====================================================
 
         print()
@@ -1445,7 +1598,7 @@ def optimize_product_price(
         print()
 
         # ====================================================
-        # 13. RETURN RESULT
+        # 14. RETURN RESULT
         # ====================================================
 
         return PriceOptimizationResponse(
@@ -1456,41 +1609,25 @@ def optimize_product_price(
 
             category=product.category,
 
-            current_price=round(
-                current_price,
-                2,
-            ),
+            current_price=round(current_price, 2),
 
-            recommended_price=round(
-                recommended_price,
-                2,
-            ),
+            recommended_price=round(recommended_price, 2),
 
-            expected_units_sold=round(
-                expected_units,
-                2,
-            ),
+            expected_units_sold=round(expected_units, 2),
 
-            expected_revenue=round(
-                expected_revenue,
-                2,
-            ),
+            expected_revenue=round(expected_revenue, 2),
 
-            price_change_percentage=round(
-                price_change_percentage,
-                2,
-            ),
+            price_change_percentage=round(price_change_percentage, 2),
 
-            revenue_change_percentage=round(
-                revenue_change_percentage,
-                2,
-            ),
+            revenue_change_percentage=round(revenue_change_percentage, 2),
 
             candidates=candidates,
 
             recommendation=recommendation,
 
             explanation=explanation,
+
+            pricing_factors=pricing_factors,
         )
 
     except HTTPException:
@@ -1592,13 +1729,13 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 3. GENERATE CANDIDATES
+        # 3. GENERATE CANDIDATES - WIDER RANGE
         # ====================================================
 
         candidate_percentages = list(
             range(
-                -20,
-                21,
+                -40,  # Wider range
+                41,   # Wider range
                 1,
             )
         )
