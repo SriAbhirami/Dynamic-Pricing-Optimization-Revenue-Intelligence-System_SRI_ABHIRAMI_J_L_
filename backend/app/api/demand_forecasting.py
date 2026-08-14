@@ -1,7 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from app.ml.demand_forecasting.predict import predict_demand
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+from pathlib import Path
+import json
+
+
+from app.ml.demand_forecasting.predict import (
+    predict_demand
+)
+
+from app.database.database import get_db
+from app.models.pricing_demand import PricingDemand
 
 
 router = APIRouter(
@@ -10,7 +22,37 @@ router = APIRouter(
 )
 
 
+# ============================================================
+# FORECAST FILE LOCATION
+# ============================================================
+
+# Project root:
+# Dynamic-Pricing-Optimization-Revenue-Intelligence-System_SRI_ABHIRAMI_J_L_
+#
+# backend/app/api/demand_forecasting.py
+#
+# parents:
+# api -> demand_forecasting.py
+# app -> api
+# backend -> app
+# project root -> backend
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+FORECAST_SUMMARY_PATH = (
+    PROJECT_ROOT
+    / "datasets"
+    / "forecasts"
+    / "forecast_summary.json"
+)
+
+
+# ============================================================
+# REQUEST MODEL
+# ============================================================
+
 class DemandForecastRequest(BaseModel):
+
     base_price: float
     current_price: float
     price_change_pct: float
@@ -36,30 +78,576 @@ class DemandForecastRequest(BaseModel):
     stockout_flag: int
 
 
+# ============================================================
+# SINGLE PREDICTION RESPONSE
+# ============================================================
+
 class DemandForecastResponse(BaseModel):
+
     predicted_demand_index: float
 
+
+# ============================================================
+# FORECAST HORIZON RESPONSE
+# ============================================================
+
+class ForecastHorizon(BaseModel):
+
+    forecast_horizon: str
+    forecast_start: str
+    forecast_end: str
+    forecast_days: int
+
+    production_model: str
+
+    total_predicted_demand: float
+    average_daily_demand: float
+
+    maximum_daily_demand: float
+    minimum_daily_demand: float
+
+    total_predicted_revenue: float
+
+    demand_trend: str
+    trend_change_percent: float
+
+    confidence_score: float
+
+
+# ============================================================
+# COMPLETE FORECAST RESPONSE
+# ============================================================
+
+class DemandForecastSummaryResponse(BaseModel):
+
+    seven_days: ForecastHorizon
+    fourteen_days: ForecastHorizon
+    thirty_days: ForecastHorizon
+
+    three_months: ForecastHorizon
+    six_months: ForecastHorizon
+
+    twelve_months: ForecastHorizon
+
+
+# ============================================================
+# SEASONAL TREND RESPONSE
+# ============================================================
+
+class SeasonalDataPoint(BaseModel):
+
+    month: str
+    month_number: int
+    demand: float
+
+
+class SeasonalTrendResponse(BaseModel):
+
+    product_id: str
+
+    seasonal_data: list[SeasonalDataPoint]
+
+    peak_month: str
+    peak_demand: float
+
+    lowest_month: str
+    lowest_demand: float
+
+    seasonality_strength: str
+    seasonality_change_pct: float
+
+
+# ============================================================
+# MONTH NAMES
+# ============================================================
+
+MONTH_NAMES = {
+
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December"
+
+}
+
+
+# ============================================================
+# ORIGINAL SINGLE PREDICTION ENDPOINT
+# ============================================================
 
 @router.post(
     "/predict",
     response_model=DemandForecastResponse
 )
-def predict_demand_index(data: DemandForecastRequest):
+def predict_demand_index(
+    data: DemandForecastRequest
+):
 
     try:
+
         prediction = predict_demand(
             data.model_dump()
         )
 
         return {
-            "predicted_demand_index": round(
-                float(prediction),
-                2
-            )
+
+            "predicted_demand_index":
+                round(
+                    float(prediction),
+                    2
+                )
+
         }
 
     except Exception as e:
+
         raise HTTPException(
+
             status_code=500,
-            detail=f"Demand prediction failed: {str(e)}"
+
+            detail=(
+                f"Demand prediction failed: {str(e)}"
+            )
+
+        )
+
+
+# ============================================================
+# PRODUCTION FORECAST SUMMARY
+# ============================================================
+
+@router.get(
+    "/forecast",
+    response_model=DemandForecastSummaryResponse
+)
+def get_demand_forecast():
+
+    """
+    Return the production demand forecasts generated by:
+
+        scripts/demand_forecaster.py
+
+    The script generates:
+
+        7 days
+        14 days
+        30 days
+        3 months
+        6 months
+        12 months
+
+    and saves them to:
+
+        datasets/forecasts/forecast_summary.json
+    """
+
+    try:
+
+        # ====================================================
+        # CHECK FILE
+        # ====================================================
+
+        if not FORECAST_SUMMARY_PATH.exists():
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+                    "Forecast summary not found. "
+                    "Run scripts/demand_forecaster.py first."
+                )
+
+            )
+
+
+        # ====================================================
+        # LOAD JSON
+        # ====================================================
+
+        with open(
+            FORECAST_SUMMARY_PATH,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            forecast_data = json.load(file)
+
+
+        # ====================================================
+        # VALIDATE REQUIRED HORIZONS
+        # ====================================================
+
+        required_horizons = [
+
+            "7_days",
+            "14_days",
+            "30_days",
+            "3_months",
+            "6_months",
+            "12_months"
+
+        ]
+
+
+        missing_horizons = [
+
+            horizon
+
+            for horizon in required_horizons
+
+            if horizon not in forecast_data
+
+        ]
+
+
+        if missing_horizons:
+
+            raise HTTPException(
+
+                status_code=500,
+
+                detail=(
+                    "Forecast summary is incomplete. "
+                    f"Missing horizons: {missing_horizons}"
+                )
+
+            )
+
+
+        # ====================================================
+        # RETURN FORECASTS
+        # ====================================================
+
+        return {
+
+            "seven_days":
+                forecast_data["7_days"],
+
+            "fourteen_days":
+                forecast_data["14_days"],
+
+            "thirty_days":
+                forecast_data["30_days"],
+
+            "three_months":
+                forecast_data["3_months"],
+
+            "six_months":
+                forecast_data["6_months"],
+
+            "twelve_months":
+                forecast_data["12_months"]
+
+        }
+
+
+    except HTTPException:
+
+        raise
+
+
+    except json.JSONDecodeError as e:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Forecast summary JSON is invalid: "
+                f"{str(e)}"
+            )
+
+        )
+
+
+    except Exception as e:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Failed to load demand forecast summary: "
+                f"{str(e)}"
+            )
+
+        )
+
+
+# ============================================================
+# SEASONAL TREND ENDPOINT
+# ============================================================
+
+@router.get(
+    "/seasonal/{product_id}",
+    response_model=SeasonalTrendResponse
+)
+def get_seasonal_trend(
+    product_id: str,
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        # ====================================================
+        # GET HISTORICAL MONTHLY DEMAND
+        # ====================================================
+
+        monthly_data = (
+
+            db.query(
+
+                func.extract(
+                    "month",
+                    PricingDemand.date
+                ).label("month_number"),
+
+                func.avg(
+                    PricingDemand.demand_index
+                ).label("average_demand")
+
+            )
+
+            .filter(
+                PricingDemand.product_id ==
+                str(product_id)
+            )
+
+            .filter(
+                PricingDemand.date.isnot(None)
+            )
+
+            .filter(
+                PricingDemand.demand_index.isnot(None)
+            )
+
+            .group_by(
+
+                func.extract(
+                    "month",
+                    PricingDemand.date
+                )
+
+            )
+
+            .order_by(
+
+                func.extract(
+                    "month",
+                    PricingDemand.date
+                )
+
+            )
+
+            .all()
+
+        )
+
+
+        # ====================================================
+        # NO DATA
+        # ====================================================
+
+        if not monthly_data:
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+                    f"No historical demand data found "
+                    f"for product {product_id}."
+                )
+
+            )
+
+
+        # ====================================================
+        # FORMAT MONTHLY DATA
+        # ====================================================
+
+        seasonal_data = []
+
+
+        for row in monthly_data:
+
+            month_number = int(
+                row.month_number
+            )
+
+            average_demand = float(
+                row.average_demand or 0
+            )
+
+
+            seasonal_data.append({
+
+                "month":
+                    MONTH_NAMES.get(
+                        month_number,
+                        f"Month {month_number}"
+                    ),
+
+                "month_number":
+                    month_number,
+
+                "demand":
+                    round(
+                        average_demand,
+                        2
+                    )
+
+            })
+
+
+        # ====================================================
+        # PEAK MONTH
+        # ====================================================
+
+        peak_point = max(
+
+            seasonal_data,
+
+            key=lambda item:
+                item["demand"]
+
+        )
+
+
+        # ====================================================
+        # LOWEST MONTH
+        # ====================================================
+
+        lowest_point = min(
+
+            seasonal_data,
+
+            key=lambda item:
+                item["demand"]
+
+        )
+
+
+        peak_demand = float(
+            peak_point["demand"]
+        )
+
+        lowest_demand = float(
+            lowest_point["demand"]
+        )
+
+
+        # ====================================================
+        # SEASONALITY CHANGE
+        # ====================================================
+
+        if lowest_demand > 0:
+
+            seasonality_change_pct = (
+
+                (
+                    peak_demand -
+                    lowest_demand
+                )
+                /
+                lowest_demand
+
+            ) * 100
+
+        else:
+
+            seasonality_change_pct = 0
+
+
+        seasonality_change_pct = round(
+            seasonality_change_pct,
+            2
+        )
+
+
+        # ====================================================
+        # SEASONALITY STRENGTH
+        # ====================================================
+
+        if seasonality_change_pct >= 40:
+
+            seasonality_strength = "Strong"
+
+        elif seasonality_change_pct >= 20:
+
+            seasonality_strength = "Moderate"
+
+        elif seasonality_change_pct >= 10:
+
+            seasonality_strength = "Mild"
+
+        else:
+
+            seasonality_strength = "Stable"
+
+
+        # ====================================================
+        # RESPONSE
+        # ====================================================
+
+        return {
+
+            "product_id":
+                str(product_id),
+
+            "seasonal_data":
+                seasonal_data,
+
+            "peak_month":
+                peak_point["month"],
+
+            "peak_demand":
+                round(
+                    peak_demand,
+                    2
+                ),
+
+            "lowest_month":
+                lowest_point["month"],
+
+            "lowest_demand":
+                round(
+                    lowest_demand,
+                    2
+                ),
+
+            "seasonality_strength":
+                seasonality_strength,
+
+            "seasonality_change_pct":
+                seasonality_change_pct
+
+        }
+
+
+    except HTTPException:
+
+        raise
+
+
+    except Exception as e:
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                f"Seasonal trend analysis failed: "
+                f"{str(e)}"
+            )
+
         )

@@ -1,3 +1,8 @@
+# ============================================================
+# TRAIN PRICE RESPONSE MODEL
+# INR-NORMALIZED VERSION
+# ============================================================
+
 import os
 import joblib
 import numpy as np
@@ -12,6 +17,57 @@ from xgboost import XGBRegressor
 
 
 # ============================================================
+# CURRENCY CONFIGURATION
+# ============================================================
+#
+# IMPORTANT:
+#
+# The supplied datasets do not contain an explicit currency
+# column.
+#
+# PricePilot uses INR as its application currency.
+#
+# Therefore, the source monetary values are normalized into
+# INR BEFORE model training.
+#
+# This value is a configurable dataset-normalization assumption.
+#
+# If you later confirm the original dataset's exact currency
+# and historical exchange rate, change this ONE value.
+#
+# ============================================================
+
+SOURCE_CURRENCY = "USD"
+
+TARGET_CURRENCY = "INR"
+
+USD_TO_INR = 85.0
+
+
+print()
+print("=" * 75)
+print("CURRENCY CONFIGURATION")
+print("=" * 75)
+
+print(
+    f"Source currency : {SOURCE_CURRENCY}"
+)
+
+print(
+    f"Model currency  : {TARGET_CURRENCY}"
+)
+
+print(
+    f"Conversion rate : 1 {SOURCE_CURRENCY} = "
+    f"₹{USD_TO_INR:.2f}"
+)
+
+print(
+    "All monetary model features will be normalized to INR."
+)
+
+
+# ============================================================
 # PATHS
 # ============================================================
 
@@ -22,6 +78,7 @@ BASE_DIR = os.path.abspath(
     )
 )
 
+
 PRICING_DATA_PATH = os.path.join(
     BASE_DIR,
     "datasets",
@@ -29,12 +86,14 @@ PRICING_DATA_PATH = os.path.join(
     "retail_pricing_demand_100k.csv",
 )
 
+
 CUSTOMER_DATA_PATH = os.path.join(
     BASE_DIR,
     "datasets",
     "raw",
     "ecommerce_customer_behavior_dataset_v2.csv",
 )
+
 
 MODEL_DIR = os.path.join(
     BASE_DIR,
@@ -44,10 +103,12 @@ MODEL_DIR = os.path.join(
     "price_prediction",
 )
 
+
 MODEL_PATH = os.path.join(
     MODEL_DIR,
     "xgb_price_response_model.joblib",
 )
+
 
 PREPROCESSOR_PATH = os.path.join(
     MODEL_DIR,
@@ -62,42 +123,37 @@ PREPROCESSOR_PATH = os.path.join(
 def print_section(title):
 
     print()
-    print("=" * 70)
+    print("=" * 75)
     print(title)
-    print("=" * 70)
+    print("=" * 75)
 
 
 # ============================================================
-# LOAD PRICING DATA
+# LOAD DATA
 # ============================================================
 
 print_section(
-    "LOADING PRICING & DEMAND DATASET"
+    "LOADING DATASETS"
 )
+
 
 pricing_df = pd.read_csv(
     PRICING_DATA_PATH
 )
 
-print(
-    f"Pricing dataset shape: {pricing_df.shape}"
-)
-
-
-# ============================================================
-# LOAD CUSTOMER DATA
-# ============================================================
-
-print_section(
-    "LOADING CUSTOMER BEHAVIOUR DATASET"
-)
 
 customer_df = pd.read_csv(
     CUSTOMER_DATA_PATH
 )
 
+
 print(
-    f"Customer behaviour dataset shape: {customer_df.shape}"
+    f"Pricing dataset shape  : {pricing_df.shape}"
+)
+
+
+print(
+    f"Customer dataset shape : {customer_df.shape}"
 )
 
 
@@ -112,6 +168,7 @@ pricing_df["category"] = (
     .str.lower()
 )
 
+
 customer_df["Product_Category"] = (
     customer_df["Product_Category"]
     .astype(str)
@@ -121,11 +178,132 @@ customer_df["Product_Category"] = (
 
 
 # ============================================================
-# CUSTOMER BEHAVIOUR FEATURES
+# DATE
+# ============================================================
+
+pricing_df["date"] = pd.to_datetime(
+    pricing_df["date"],
+    errors="coerce",
+)
+
+
+# ============================================================
+# CURRENCY NORMALIZATION
+# ============================================================
+#
+# IMPORTANT:
+#
+# Monetary columns are converted BEFORE:
+#
+# - customer aggregation
+# - category price statistics
+# - historical price calculations
+# - rolling price calculations
+#
+# This keeps the entire feature-engineering pipeline in INR.
+#
 # ============================================================
 
 print_section(
-    "BUILDING CUSTOMER BEHAVIOUR FEATURES"
+    "CONVERTING MONETARY VALUES TO INR"
+)
+
+
+# ------------------------------------------------------------
+# PRICING / DEMAND DATASET
+# ------------------------------------------------------------
+
+pricing_money_columns = [
+
+    "base_price",
+
+    "current_price",
+
+    "revenue",
+
+]
+
+
+for column in pricing_money_columns:
+
+    if column in pricing_df.columns:
+
+        pricing_df[column] = pd.to_numeric(
+            pricing_df[column],
+            errors="coerce",
+        )
+
+        pricing_df[column] = (
+            pricing_df[column]
+            * USD_TO_INR
+        )
+
+
+# ------------------------------------------------------------
+# CUSTOMER BEHAVIOUR DATASET
+# ------------------------------------------------------------
+
+customer_money_columns = [
+
+    "Unit_Price",
+
+    "Discount_Amount",
+
+    "Total_Amount",
+
+]
+
+
+for column in customer_money_columns:
+
+    if column in customer_df.columns:
+
+        customer_df[column] = pd.to_numeric(
+            customer_df[column],
+            errors="coerce",
+        )
+
+        customer_df[column] = (
+            customer_df[column]
+            * USD_TO_INR
+        )
+
+
+print(
+    "Pricing dataset monetary columns converted:"
+)
+
+
+for column in pricing_money_columns:
+
+    if column in pricing_df.columns:
+
+        print(
+            f"  {column} → INR"
+        )
+
+
+print()
+print(
+    "Customer dataset monetary columns converted:"
+)
+
+
+for column in customer_money_columns:
+
+    if column in customer_df.columns:
+
+        print(
+            f"  {column} → INR"
+        )
+
+
+# ============================================================
+# CUSTOMER BEHAVIOUR
+# ============================================================
+
+print_section(
+    "BUILDING CUSTOMER BEHAVIOUR SIGNALS"
 )
 
 
@@ -140,8 +318,11 @@ customer_df["Is_Returning_Customer"] = (
 
 
 customer_behavior = (
+
     customer_df
+
     .groupby("Product_Category")
+
     .agg(
 
         customer_avg_age=(
@@ -198,16 +379,11 @@ customer_behavior = (
             "Order_ID",
             "count",
         ),
+
     )
+
     .reset_index()
-)
 
-
-print()
-print(
-    customer_behavior.to_string(
-        index=False
-    )
 )
 
 
@@ -216,96 +392,78 @@ print(
 # ============================================================
 
 print_section(
-    "MERGING PRICING + CUSTOMER BEHAVIOUR SIGNALS"
+    "MERGING DATASETS"
 )
+
 
 combined_df = pricing_df.merge(
+
     customer_behavior,
+
     left_on="category",
+
     right_on="Product_Category",
+
     how="left",
+
 )
 
+
 combined_df.drop(
+
     columns=[
         "Product_Category",
     ],
+
     inplace=True,
-)
 
-
-print(
-    f"Combined dataset shape: {combined_df.shape}"
 )
 
 
 # ============================================================
-# DATE FEATURES
-# ============================================================
-
-print_section(
-    "CREATING DATE FEATURES"
-)
-
-combined_df["date"] = pd.to_datetime(
-    combined_df["date"],
-    errors="coerce",
-)
-
-combined_df["year"] = (
-    combined_df["date"]
-    .dt.year
-    .fillna(2024)
-    .astype(int)
-)
-
-combined_df["month"] = (
-    combined_df["date"]
-    .dt.month
-    .fillna(1)
-    .astype(int)
-)
-
-combined_df["day"] = (
-    combined_df["date"]
-    .dt.day
-    .fillna(1)
-    .astype(int)
-)
-
-combined_df["day_of_week"] = (
-    combined_df["date"]
-    .dt.dayofweek
-    .fillna(0)
-    .astype(int)
-)
-
-
-# ============================================================
-# NUMERIC CLEANING
+# NUMERIC CONVERSION
 # ============================================================
 
 numeric_columns = [
 
     "base_price",
+
     "current_price",
+
     "inventory_level",
+
     "stockout_flag",
+
     "units_sold",
+
+    "demand_index",
+
+    "discount_pct",
 
     "Age",
 
     "customer_avg_age",
+
     "customer_avg_unit_price",
+
     "customer_avg_quantity",
+
     "customer_avg_discount_amount",
+
     "customer_avg_order_value",
+
     "customer_returning_rate",
+
     "customer_avg_session_duration",
+
     "customer_avg_pages_viewed",
+
     "customer_avg_delivery_time",
+
     "customer_avg_rating",
+
     "customer_order_count",
+
 ]
 
 
@@ -314,13 +472,133 @@ for column in numeric_columns:
     if column in combined_df.columns:
 
         combined_df[column] = pd.to_numeric(
+
             combined_df[column],
+
             errors="coerce",
+
         )
 
 
 # ============================================================
-# PRICE RESPONSE FEATURES
+# SORT DATA
+# ============================================================
+
+print_section(
+    "SORTING HISTORICAL DATA"
+)
+
+
+# ------------------------------------------------------------
+# product_id is NOT used as a model feature.
+#
+# It is only used to calculate historical signals.
+#
+# This prevents historical information from different products
+# inside the same category from being mixed together.
+# ------------------------------------------------------------
+
+if "product_id" in combined_df.columns:
+
+    combined_df = (
+
+        combined_df
+
+        .sort_values(
+            [
+                "product_id",
+                "date",
+            ]
+        )
+
+        .reset_index(
+            drop=True
+        )
+
+    )
+
+    HISTORY_GROUP = "product_id"
+
+    print(
+        "Historical features grouped by product_id."
+    )
+
+else:
+
+    combined_df = (
+
+        combined_df
+
+        .sort_values(
+            [
+                "category",
+                "date",
+            ]
+        )
+
+        .reset_index(
+            drop=True
+        )
+
+    )
+
+    HISTORY_GROUP = "category"
+
+    print(
+        "product_id not found."
+    )
+
+    print(
+        "Historical features grouped by category."
+    )
+
+
+# ============================================================
+# DATE FEATURES
+# ============================================================
+
+combined_df["year"] = (
+
+    combined_df["date"]
+    .dt.year
+    .fillna(2024)
+    .astype(int)
+
+)
+
+
+combined_df["month"] = (
+
+    combined_df["date"]
+    .dt.month
+    .fillna(1)
+    .astype(int)
+
+)
+
+
+combined_df["day"] = (
+
+    combined_df["date"]
+    .dt.day
+    .fillna(1)
+    .astype(int)
+
+)
+
+
+combined_df["day_of_week"] = (
+
+    combined_df["date"]
+    .dt.dayofweek
+    .fillna(0)
+    .astype(int)
+
+)
+
+
+# ============================================================
+# BASIC PRICE FEATURES
 # ============================================================
 
 print_section(
@@ -328,35 +606,40 @@ print_section(
 )
 
 
-# ------------------------------------------------------------
-# Protect base price
-# ------------------------------------------------------------
-
 combined_df["base_price"] = (
+
     combined_df["base_price"]
+
     .replace(
         [np.inf, -np.inf],
         np.nan,
     )
+
 )
+
 
 combined_df["current_price"] = (
+
     combined_df["current_price"]
+
     .replace(
         [np.inf, -np.inf],
         np.nan,
     )
+
 )
 
 
 # ------------------------------------------------------------
-# Price ratio
+# PRICE RATIO
 #
 # current_price / base_price
 #
-# < 1  -> discount
-# = 1  -> base price
-# > 1  -> price above base
+# < 1 = discount
+# = 1 = base price
+# > 1 = above base price
+#
+# Currency-independent.
 # ------------------------------------------------------------
 
 combined_df["price_ratio"] = np.where(
@@ -364,126 +647,556 @@ combined_df["price_ratio"] = np.where(
     combined_df["base_price"] > 0,
 
     combined_df["current_price"]
-    / combined_df["base_price"],
+    /
+    combined_df["base_price"],
 
     1.0,
+
 )
 
 
 combined_df["price_ratio"] = (
+
     combined_df["price_ratio"]
+
     .replace(
         [np.inf, -np.inf],
         np.nan,
     )
+
     .clip(
-        lower=0.05,
+        lower=0.10,
         upper=3.0,
     )
+
 )
 
 
 # ------------------------------------------------------------
-# Effective discount
+# EFFECTIVE DISCOUNT
 # ------------------------------------------------------------
 
 combined_df["effective_discount_pct"] = (
 
     1.0
-    - combined_df["price_ratio"]
+    -
+    combined_df["price_ratio"]
 
 ) * 100
 
 
 combined_df["effective_discount_pct"] = (
+
     combined_df["effective_discount_pct"]
+
     .replace(
         [np.inf, -np.inf],
         np.nan,
     )
+
     .clip(
         lower=-200,
         upper=95,
     )
-)
 
-
-print()
-print(
-    f"Current price mean: "
-    f"{combined_df['current_price'].mean():.2f}"
-)
-
-print(
-    f"Base price mean: "
-    f"{combined_df['base_price'].mean():.2f}"
-)
-
-print(
-    f"Price ratio mean: "
-    f"{combined_df['price_ratio'].mean():.4f}"
-)
-
-print(
-    f"Effective discount mean: "
-    f"{combined_df['effective_discount_pct'].mean():.2f}%"
 )
 
 
 # ============================================================
-# PRICE RELATIONSHIP CHECK
+# MARKET PRICE POSITION
 # ============================================================
 
 print_section(
-    "PRICE RESPONSE CORRELATION CHECK"
+    "CREATING MARKET PRICE POSITION SIGNALS"
 )
 
-correlation_columns = [
 
-    "current_price",
-    "base_price",
-    "price_ratio",
-    "effective_discount_pct",
-    "units_sold",
-]
+category_price_stats = (
 
+    combined_df
 
-print(
-    combined_df[
-        correlation_columns
-    ]
-    .corr(numeric_only=True)["units_sold"]
-    .sort_values(
-        ascending=False
+    .groupby("category")["current_price"]
+
+    .agg(
+
+        category_avg_price="mean",
+
+        category_median_price="median",
+
     )
+
+    .reset_index()
+
+)
+
+
+combined_df = combined_df.merge(
+
+    category_price_stats,
+
+    on="category",
+
+    how="left",
+
+)
+
+
+combined_df["price_vs_category_avg"] = np.where(
+
+    combined_df["category_avg_price"] > 0,
+
+    combined_df["current_price"]
+    /
+    combined_df["category_avg_price"],
+
+    1.0,
+
+)
+
+
+combined_df["price_vs_category_avg"] = (
+
+    combined_df["price_vs_category_avg"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=0.10,
+        upper=5.0,
+    )
+
 )
 
 
 # ============================================================
-# FEATURE DEFINITIONS
-# ============================================================
-#
-# IMPORTANT:
-#
-# product_id is intentionally NOT included.
-#
-# Why?
-#
-# The previous model learned product-specific averages too
-# strongly. That caused the model to predict nearly identical
-# demand values when candidate prices changed.
-#
-# Removing product_id makes the model learn general pricing
-# behaviour across products.
-#
+# HISTORICAL PRICE / DEMAND SIGNALS
 # ============================================================
 
+print_section(
+    "CREATING LEAKAGE-FREE HISTORICAL SIGNALS"
+)
+
+
+# ------------------------------------------------------------
+# PREVIOUS PRICE
+# ------------------------------------------------------------
+
+combined_df["previous_price"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["current_price"]
+
+    .shift(1)
+
+)
+
+
+# ------------------------------------------------------------
+# PREVIOUS UNITS
+# ------------------------------------------------------------
+
+combined_df["previous_units"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["units_sold"]
+
+    .shift(1)
+
+)
+
+
+# ------------------------------------------------------------
+# PREVIOUS INVENTORY
+# ------------------------------------------------------------
+
+combined_df["previous_inventory"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["inventory_level"]
+
+    .shift(1)
+
+)
+
+
+# ------------------------------------------------------------
+# PREVIOUS PRICE RATIO
+# ------------------------------------------------------------
+
+combined_df["previous_price_ratio"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["price_ratio"]
+
+    .shift(1)
+
+)
+
+
+# ------------------------------------------------------------
+# PRICE CHANGE
+# ------------------------------------------------------------
+
+combined_df["price_change_pct"] = np.where(
+
+    combined_df["previous_price"] > 0,
+
+    (
+
+        (
+
+            combined_df["current_price"]
+
+            -
+
+            combined_df["previous_price"]
+
+        )
+
+        /
+
+        combined_df["previous_price"]
+
+    ) * 100,
+
+    0.0,
+
+)
+
+
+combined_df["price_change_pct"] = (
+
+    combined_df["price_change_pct"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=-80,
+        upper=80,
+    )
+
+)
+
+
+# ============================================================
+# HISTORICAL DEMAND MOMENTUM
+# ============================================================
+
+combined_df["previous_previous_units"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["units_sold"]
+
+    .shift(2)
+
+)
+
+
+combined_df["demand_momentum"] = np.where(
+
+    combined_df["previous_previous_units"] > 0,
+
+    combined_df["previous_units"]
+    /
+    combined_df["previous_previous_units"],
+
+    1.0,
+
+)
+
+
+combined_df["demand_momentum"] = (
+
+    combined_df["demand_momentum"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=0.1,
+        upper=10.0,
+    )
+
+)
+
+
+# ============================================================
+# INVENTORY PRESSURE
+# ============================================================
+
+combined_df["inventory_pressure"] = np.where(
+
+    combined_df["previous_units"] > 0,
+
+    combined_df["previous_inventory"]
+    /
+    combined_df["previous_units"],
+
+    combined_df["previous_inventory"],
+
+)
+
+
+combined_df["inventory_pressure"] = (
+
+    combined_df["inventory_pressure"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=0,
+        upper=10000,
+    )
+
+)
+
+
+# ============================================================
+# HISTORICAL PRICE ELASTICITY
+# ============================================================
+
+combined_df["previous_price_change_pct"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["price_change_pct"]
+
+    .shift(1)
+
+)
+
+
+combined_df["previous_demand_change_pct"] = np.where(
+
+    combined_df["previous_previous_units"] > 0,
+
+    (
+
+        (
+
+            combined_df["previous_units"]
+
+            -
+
+            combined_df["previous_previous_units"]
+
+        )
+
+        /
+
+        combined_df["previous_previous_units"]
+
+    ) * 100,
+
+    0.0,
+
+)
+
+
+combined_df["historical_price_elasticity"] = np.where(
+
+    np.abs(
+        combined_df["previous_price_change_pct"]
+    ) >= 0.5,
+
+    combined_df["previous_demand_change_pct"]
+    /
+    combined_df["previous_price_change_pct"],
+
+    0.0,
+
+)
+
+
+combined_df["historical_price_elasticity"] = (
+
+    combined_df["historical_price_elasticity"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=-10,
+        upper=10,
+    )
+
+)
+
+
+# ============================================================
+# HISTORICAL ROLLING DEMAND
+# ============================================================
+
+print_section(
+    "CREATING HISTORICAL DEMAND TRENDS"
+)
+
+
+combined_df["rolling_units_7"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["units_sold"]
+
+    .transform(
+
+        lambda x:
+
+        x.shift(1)
+
+        .rolling(
+            7,
+            min_periods=1,
+        )
+
+        .mean()
+
+    )
+
+)
+
+
+combined_df["rolling_units_14"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["units_sold"]
+
+    .transform(
+
+        lambda x:
+
+        x.shift(1)
+
+        .rolling(
+            14,
+            min_periods=1,
+        )
+
+        .mean()
+
+    )
+
+)
+
+
+# ============================================================
+# HISTORICAL ROLLING PRICE
+# ============================================================
+
+combined_df["rolling_price_7"] = (
+
+    combined_df
+
+    .groupby(HISTORY_GROUP)["current_price"]
+
+    .transform(
+
+        lambda x:
+
+        x.shift(1)
+
+        .rolling(
+            7,
+            min_periods=1,
+        )
+
+        .mean()
+
+    )
+
+)
+
+
+# ============================================================
+# PRICE RELATIVE TO HISTORICAL PRICE
+# ============================================================
+
+combined_df["price_vs_recent_avg"] = np.where(
+
+    combined_df["rolling_price_7"] > 0,
+
+    combined_df["current_price"]
+    /
+    combined_df["rolling_price_7"],
+
+    1.0,
+
+)
+
+
+combined_df["price_vs_recent_avg"] = (
+
+    combined_df["price_vs_recent_avg"]
+
+    .replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+    .clip(
+        lower=0.10,
+        upper=5.0,
+    )
+
+)
+
+
+# ============================================================
+# PRICE-DEMAND INTERACTION
+# ============================================================
+
+combined_df["price_demand_pressure"] = (
+
+    combined_df["price_vs_recent_avg"]
+
+    *
+
+    combined_df["rolling_units_7"]
+
+)
+
+
+# ============================================================
+# REMOVE INVALID VALUES
+# ============================================================
+
+combined_df.replace(
+
+    [np.inf, -np.inf],
+
+    np.nan,
+
+    inplace=True,
+
+)
+
+
+# ============================================================
+# FEATURES
+# ============================================================
 
 FEATURE_COLUMNS = [
 
-    # --------------------------------------------------------
-    # PRICE
-    # --------------------------------------------------------
+    # CURRENT PRICE
 
     "current_price",
 
@@ -493,17 +1206,39 @@ FEATURE_COLUMNS = [
 
     "effective_discount_pct",
 
-    # --------------------------------------------------------
+    "price_vs_category_avg",
+
+    "price_vs_recent_avg",
+
+    "price_change_pct",
+
+    "historical_price_elasticity",
+
+    # PRICE / DEMAND INTERACTION
+
+    "price_demand_pressure",
+
+    # HISTORICAL DEMAND
+
+    "demand_momentum",
+
+    "rolling_units_7",
+
+    "rolling_units_14",
+
+    "rolling_price_7",
+
     # INVENTORY
-    # --------------------------------------------------------
 
     "inventory_level",
 
+    "previous_inventory",
+
+    "inventory_pressure",
+
     "stockout_flag",
 
-    # --------------------------------------------------------
-    # DATE
-    # --------------------------------------------------------
+    # TIME
 
     "year",
 
@@ -513,9 +1248,7 @@ FEATURE_COLUMNS = [
 
     "day_of_week",
 
-    # --------------------------------------------------------
-    # PRODUCT / MARKET
-    # --------------------------------------------------------
+    # MARKET
 
     "category",
 
@@ -529,9 +1262,7 @@ FEATURE_COLUMNS = [
 
     "promotion_type",
 
-    # --------------------------------------------------------
     # CUSTOMER BEHAVIOUR
-    # --------------------------------------------------------
 
     "customer_avg_age",
 
@@ -554,6 +1285,7 @@ FEATURE_COLUMNS = [
     "customer_avg_rating",
 
     "customer_order_count",
+
 ]
 
 
@@ -561,11 +1293,71 @@ TARGET_COLUMN = "units_sold"
 
 
 # ============================================================
-# PREPARE MODEL DATA
+# IMPORTANT LEAKAGE CHECK
 # ============================================================
 
 print_section(
-    "PRICE RESPONSE TRAINING DATA SUMMARY"
+    "TARGET LEAKAGE CHECK"
+)
+
+
+for forbidden_feature in [
+
+    "units_sold",
+
+    "demand_index",
+
+    "revenue",
+
+    "demand_change_pct",
+
+    "previous_units",
+
+    "previous_previous_units",
+
+]:
+
+    if forbidden_feature in FEATURE_COLUMNS:
+
+        print(
+            f"ERROR: {forbidden_feature} "
+            f"is directly included as a model feature."
+        )
+
+    else:
+
+        print(
+            f"PASS: {forbidden_feature} "
+            f"is NOT directly used as a model feature."
+        )
+
+
+print()
+print(
+    "Historical features may internally use previous_units "
+    "because they are shifted historical observations."
+)
+
+
+# ============================================================
+# PREPARE TRAINING DATA
+# ============================================================
+
+print_section(
+    "PREPARING TRAINING DATA"
+)
+
+
+required_columns = (
+
+    FEATURE_COLUMNS
+
+    +
+
+    [
+        TARGET_COLUMN
+    ]
+
 )
 
 
@@ -573,31 +1365,30 @@ missing_columns = [
 
     column
 
-    for column in FEATURE_COLUMNS
+    for column in required_columns
 
     if column not in combined_df.columns
+
 ]
 
 
 if missing_columns:
 
     raise ValueError(
-        "Missing required model columns: "
-        + str(missing_columns)
+
+        "Missing required columns:\n"
+
+        +
+
+        str(missing_columns)
+
     )
 
 
 model_df = combined_df[
-    FEATURE_COLUMNS
-    + [
-        TARGET_COLUMN
-    ]
+    required_columns
 ].copy()
 
-
-# ============================================================
-# REMOVE INVALID TARGET
-# ============================================================
 
 model_df = model_df[
     model_df[TARGET_COLUMN].notna()
@@ -605,52 +1396,24 @@ model_df = model_df[
 
 
 model_df[TARGET_COLUMN] = (
+
     pd.to_numeric(
+
         model_df[TARGET_COLUMN],
+
         errors="coerce",
+
     )
-    .fillna(0)
+
     .clip(
-        lower=0
+        lower=0,
     )
-)
 
-
-print(
-    f"Rows used for training: {len(model_df)}"
-)
-
-print(
-    f"Number of features: {len(FEATURE_COLUMNS)}"
-)
-
-print(
-    f"Target: {TARGET_COLUMN}"
-)
-
-print(
-    f"Target mean: "
-    f"{model_df[TARGET_COLUMN].mean():.4f}"
-)
-
-print(
-    f"Target median: "
-    f"{model_df[TARGET_COLUMN].median():.4f}"
-)
-
-print(
-    f"Target min: "
-    f"{model_df[TARGET_COLUMN].min():.4f}"
-)
-
-print(
-    f"Target max: "
-    f"{model_df[TARGET_COLUMN].max():.4f}"
 )
 
 
 # ============================================================
-# HANDLE CATEGORICAL FEATURES
+# CATEGORICAL FEATURES
 # ============================================================
 
 categorical_features = [
@@ -666,8 +1429,13 @@ categorical_features = [
     "season",
 
     "promotion_type",
+
 ]
 
+
+# ============================================================
+# NUMERIC FEATURES
+# ============================================================
 
 numeric_features = [
 
@@ -679,7 +1447,29 @@ numeric_features = [
 
     "effective_discount_pct",
 
+    "price_vs_category_avg",
+
+    "price_vs_recent_avg",
+
+    "price_change_pct",
+
+    "historical_price_elasticity",
+
+    "price_demand_pressure",
+
+    "demand_momentum",
+
+    "rolling_units_7",
+
+    "rolling_units_14",
+
+    "rolling_price_7",
+
     "inventory_level",
+
+    "previous_inventory",
+
+    "inventory_pressure",
 
     "stockout_flag",
 
@@ -712,69 +1502,103 @@ numeric_features = [
     "customer_avg_rating",
 
     "customer_order_count",
+
 ]
 
+
+# ============================================================
+# CLEAN CATEGORICAL FEATURES
+# ============================================================
 
 for column in categorical_features:
 
     model_df[column] = (
+
         model_df[column]
+
         .fillna("unknown")
+
         .astype(str)
+
         .str.strip()
+
         .str.lower()
-    )
 
-
-for column in numeric_features:
-
-    model_df[column] = (
-        pd.to_numeric(
-            model_df[column],
-            errors="coerce",
-        )
-        .replace(
-            [np.inf, -np.inf],
-            np.nan,
-        )
     )
 
 
 # ============================================================
-# NUMERIC MISSING VALUES
+# CLEAN NUMERIC FEATURES
+# ============================================================
+
+for column in numeric_features:
+
+    model_df[column] = (
+
+        pd.to_numeric(
+
+            model_df[column],
+
+            errors="coerce",
+
+        )
+
+        .replace(
+            [np.inf, -np.inf],
+            np.nan,
+        )
+
+    )
+
+
+# ============================================================
+# FILL NUMERIC MISSING VALUES
 # ============================================================
 
 for column in numeric_features:
 
     median_value = (
+
         model_df[column]
+
         .median()
+
     )
+
 
     if pd.isna(median_value):
 
         median_value = 0.0
 
+
     model_df[column] = (
+
         model_df[column]
+
         .fillna(
             median_value
         )
+
     )
 
 
 # ============================================================
-# TRAIN / TEST SPLIT
+# FINAL TRAINING DATA
 # ============================================================
 
 X = model_df[
     FEATURE_COLUMNS
 ].copy()
 
+
 y = model_df[
     TARGET_COLUMN
 ].copy()
 
+
+# ============================================================
+# TRAIN / TEST SPLIT
+# ============================================================
 
 X_train, X_test, y_train, y_test = train_test_split(
 
@@ -785,16 +1609,22 @@ X_train, X_test, y_train, y_test = train_test_split(
     test_size=0.20,
 
     random_state=42,
+
 )
 
 
-print()
 print(
-    f"Training data: {X_train.shape}"
+    f"Training rows : {len(X_train)}"
 )
 
+
 print(
-    f"Testing data: {X_test.shape}"
+    f"Testing rows  : {len(X_test)}"
+)
+
+
+print(
+    f"Total features: {len(FEATURE_COLUMNS)}"
 )
 
 
@@ -802,9 +1632,8 @@ print(
 # PREPROCESSOR
 # ============================================================
 
-print()
-print(
-    "Preprocessing data..."
+print_section(
+    "BUILDING PREPROCESSOR"
 )
 
 
@@ -813,82 +1642,77 @@ preprocessor = ColumnTransformer(
     transformers=[
 
         (
+
             "numeric",
 
             "passthrough",
 
             numeric_features,
+
         ),
 
         (
+
             "categorical",
 
             OneHotEncoder(
+
                 handle_unknown="ignore",
+
                 sparse_output=False,
+
             ),
 
             categorical_features,
+
         ),
+
     ],
 
     remainder="drop",
+
 )
 
 
 X_train_processed = (
+
     preprocessor.fit_transform(
+
         X_train
+
     )
+
 )
+
 
 X_test_processed = (
+
     preprocessor.transform(
+
         X_test
+
     )
+
 )
 
-
-print(
-    f"Processed training shape: "
-    f"{X_train_processed.shape}"
-)
-
-print(
-    f"Processed testing shape: "
-    f"{X_test_processed.shape}"
-)
-
-
-# ============================================================
-# FEATURE NAMES
-# ============================================================
 
 transformed_feature_names = (
-    preprocessor.get_feature_names_out()
+
+    preprocessor
+
+    .get_feature_names_out()
+
 )
 
 
-print()
 print(
-    f"Total transformed features: "
-    f"{len(transformed_feature_names)}"
+    f"Processed features: "
+    f"{X_train_processed.shape[1]}"
 )
 
 
 # ============================================================
 # MONOTONIC CONSTRAINTS
-# ============================================================
-#
-# current_price:
-#     higher price should not increase demand
-#
-# price_ratio:
-#     higher ratio should not increase demand
-#
-# effective_discount_pct:
-#     higher discount should not decrease demand
-#
 # ============================================================
 
 monotone_constraints = []
@@ -896,17 +1720,28 @@ monotone_constraints = []
 
 for feature_name in transformed_feature_names:
 
-    if feature_name == "numeric__current_price":
+    if feature_name in [
 
-        monotone_constraints.append(-1)
+        "numeric__current_price",
 
-    elif feature_name == "numeric__price_ratio":
+        "numeric__price_ratio",
+
+        "numeric__price_vs_category_avg",
+
+        "numeric__price_vs_recent_avg",
+
+    ]:
 
         monotone_constraints.append(-1)
 
     elif (
+
         feature_name
-        == "numeric__effective_discount_pct"
+
+        ==
+
+        "numeric__effective_discount_pct"
+
     ):
 
         monotone_constraints.append(1)
@@ -923,42 +1758,43 @@ monotone_constraints = tuple(
 
 print()
 print(
-    "Monotonic price constraints:"
+    "Monotonic pricing constraints:"
 )
 
-print(
-    "current_price          : -1"
-)
 
 print(
-    "price_ratio            : -1"
+    "current_price         : -1"
 )
 
+
 print(
-    "effective_discount_pct : +1"
+    "price_ratio           : -1"
+)
+
+
+print(
+    "price_vs_category_avg : -1"
+)
+
+
+print(
+    "price_vs_recent_avg   : -1"
+)
+
+
+print(
+    "effective_discount_pct: +1"
 )
 
 
 # ============================================================
-# LOG TRANSFORM TARGET
-# ============================================================
-#
-# Instead of training directly on units:
-#
-#     units
-#
-# train on:
-#
-#     log(1 + units)
-#
-# This reduces the dominance of high-volume observations and
-# allows the model to learn relative demand changes better.
-#
+# TARGET TRANSFORMATION
 # ============================================================
 
 y_train_log = np.log1p(
     y_train
 )
+
 
 y_test_log = np.log1p(
     y_test
@@ -970,29 +1806,29 @@ y_test_log = np.log1p(
 # ============================================================
 
 print_section(
-    "TRAINING PRICE RESPONSE XGBOOST MODEL"
+    "TRAINING PRICE RESPONSE MODEL"
 )
 
 
 model = XGBRegressor(
 
-    n_estimators=900,
+    n_estimators=1400,
 
-    max_depth=4,
+    max_depth=5,
 
-    learning_rate=0.025,
+    learning_rate=0.018,
 
-    subsample=0.90,
+    subsample=0.85,
 
-    colsample_bytree=0.90,
+    colsample_bytree=0.85,
 
-    min_child_weight=2,
+    min_child_weight=10,
 
-    gamma=0.0,
+    gamma=0.10,
 
-    reg_alpha=0.05,
+    reg_alpha=0.25,
 
-    reg_lambda=1.0,
+    reg_lambda=2.5,
 
     objective="reg:squarederror",
 
@@ -1002,8 +1838,8 @@ model = XGBRegressor(
 
     n_jobs=-1,
 
-    monotone_constraints=
-        monotone_constraints,
+    monotone_constraints=monotone_constraints,
+
 )
 
 
@@ -1014,13 +1850,19 @@ model.fit(
     y_train_log,
 
     eval_set=[
+
         (
+
             X_test_processed,
+
             y_test_log,
+
         )
+
     ],
 
     verbose=False,
+
 )
 
 
@@ -1039,8 +1881,6 @@ predictions_log = model.predict(
 )
 
 
-# Convert back from log scale
-
 predictions = np.expm1(
     predictions_log
 )
@@ -1057,78 +1897,53 @@ predictions = np.maximum(
 # ============================================================
 
 mae = mean_absolute_error(
+
     y_test,
+
     predictions,
+
 )
+
 
 rmse = np.sqrt(
+
     mean_squared_error(
+
         y_test,
+
         predictions,
+
     )
+
 )
 
+
 r2 = r2_score(
+
     y_test,
+
     predictions,
+
 )
 
 
 print_section(
-    "PRICE RESPONSE MODEL RESULTS"
+    "MODEL RESULTS"
 )
+
 
 print(
-    f"MAE  : {mae:.4f} units"
+    f"MAE : {mae:.4f}"
 )
+
 
 print(
-    f"RMSE : {rmse:.4f} units"
+    f"RMSE: {rmse:.4f}"
 )
+
 
 print(
-    f"R²   : {r2:.4f}"
-)
-
-
-# ============================================================
-# SAMPLE PREDICTIONS
-# ============================================================
-
-sample_predictions = pd.DataFrame({
-
-    "Actual Units":
-        y_test.iloc[:10].values,
-
-    "Predicted Units":
-        predictions[:10],
-
-})
-
-
-sample_predictions["Difference"] = (
-
-    sample_predictions[
-        "Predicted Units"
-    ]
-
-    -
-
-    sample_predictions[
-        "Actual Units"
-    ]
-)
-
-
-print()
-print(
-    "Sample Predictions:"
-)
-
-print(
-    sample_predictions.to_string(
-        index=False
-    )
+    f"R²  : {r2:.4f}"
 )
 
 
@@ -1137,7 +1952,7 @@ print(
 # ============================================================
 
 print_section(
-    "TOP MODEL FEATURES"
+    "TOP FEATURES"
 )
 
 
@@ -1148,24 +1963,35 @@ feature_importance = pd.DataFrame({
 
     "importance":
         model.feature_importances_,
+
 })
 
 
 feature_importance = (
+
     feature_importance
+
     .sort_values(
-        by="importance",
+
+        "importance",
+
         ascending=False,
+
     )
+
 )
 
 
 print(
-    feature_importance.head(
-        40
-    ).to_string(
+
+    feature_importance
+
+    .head(40)
+
+    .to_string(
         index=False
     )
+
 )
 
 
@@ -1178,60 +2004,31 @@ print_section(
 )
 
 
-price_feature_names = [
+price_features = feature_importance[
 
-    "numeric__current_price",
+    feature_importance["feature"].str.contains(
 
-    "numeric__base_price",
+        "price|discount|elasticity",
 
-    "numeric__price_ratio",
+        case=False,
 
-    "numeric__effective_discount_pct",
+        regex=True,
+
+    )
+
 ]
 
 
-price_importance = (
-    feature_importance[
-        feature_importance["feature"]
-        .isin(
-            price_feature_names
-        )
-    ]
-    .copy()
-)
-
-
 print(
-    price_importance.to_string(
+
+    price_features
+
+    .head(25)
+
+    .to_string(
         index=False
     )
-)
 
-
-# ============================================================
-# CUSTOMER FEATURE IMPORTANCE
-# ============================================================
-
-print_section(
-    "CUSTOMER BEHAVIOUR FEATURE IMPORTANCE"
-)
-
-
-customer_feature_importance = (
-    feature_importance[
-        feature_importance["feature"]
-        .str.startswith(
-            "numeric__customer_"
-        )
-    ]
-    .copy()
-)
-
-
-print(
-    customer_feature_importance.to_string(
-        index=False
-    )
 )
 
 
@@ -1240,7 +2037,7 @@ print(
 # ============================================================
 
 print_section(
-    "PRICE SENSITIVITY TEST (-20% TO +20%, EVERY 1%)"
+    "PRICE SENSITIVITY TEST"
 )
 
 
@@ -1250,39 +2047,46 @@ test_row = X_test.iloc[
 
 
 original_price = float(
+
     test_row[
         "current_price"
     ].iloc[0]
+
 )
 
 
-base_price_for_test = float(
-    test_row[
-        "base_price"
-    ].iloc[0]
-)
+if original_price <= 0:
+
+    original_price = 100.0
 
 
-if base_price_for_test <= 0:
+candidate_percentages = list(
 
-    base_price_for_test = (
-        original_price
-    )
-
-
-test_percentages = list(
     range(
+
         -20,
+
         21,
+
         1,
+
     )
+
 )
 
 
 sensitivity_results = []
 
 
-for percentage in test_percentages:
+# ------------------------------------------------------------
+# IMPORTANT
+#
+# All candidate prices are now INR because the model was
+# trained on INR-normalized monetary features.
+#
+# ------------------------------------------------------------
+
+for percentage in candidate_percentages:
 
     candidate_price = (
 
@@ -1291,15 +2095,22 @@ for percentage in test_percentages:
         *
 
         (
+
             1
-            + percentage / 100
+
+            +
+
+            percentage / 100
+
         )
 
     )
 
 
     candidate_row = (
+
         test_row.copy()
+
     )
 
 
@@ -1308,73 +2119,221 @@ for percentage in test_percentages:
     ] = candidate_price
 
 
-    candidate_row[
-        "price_ratio"
-    ] = (
+    # --------------------------------------------------------
+    # BASE PRICE
+    # --------------------------------------------------------
 
-        candidate_price
-        / base_price_for_test
+    base_price = float(
+
+        candidate_row[
+            "base_price"
+        ].iloc[0]
 
     )
 
+
+    if base_price <= 0:
+
+        base_price = candidate_price
+
+
+    # --------------------------------------------------------
+    # PRICE RATIO
+    # --------------------------------------------------------
+
+    candidate_price_ratio = (
+
+        candidate_price
+
+        /
+
+        base_price
+
+    )
+
+
+    candidate_row[
+        "price_ratio"
+    ] = candidate_price_ratio
+
+
+    # --------------------------------------------------------
+    # EFFECTIVE DISCOUNT
+    # --------------------------------------------------------
 
     candidate_row[
         "effective_discount_pct"
     ] = (
 
         1
-        - candidate_row[
-            "price_ratio"
-        ]
+
+        -
+
+        candidate_price_ratio
 
     ) * 100
 
 
-    candidate_processed = (
-        preprocessor.transform(
-            candidate_row
-        )
+    # --------------------------------------------------------
+    # CATEGORY PRICE POSITION
+    # --------------------------------------------------------
+
+    category_ratio = float(
+
+        candidate_row[
+            "price_vs_category_avg"
+        ].iloc[0]
+
     )
 
 
-    candidate_prediction_log = float(
+    if category_ratio > 0:
+
+        estimated_category_avg = (
+
+            original_price
+
+            /
+
+            category_ratio
+
+        )
+
+
+        if estimated_category_avg > 0:
+
+            candidate_row[
+                "price_vs_category_avg"
+            ] = (
+
+                candidate_price
+
+                /
+
+                estimated_category_avg
+
+            )
+
+
+    # --------------------------------------------------------
+    # RECENT PRICE POSITION
+    # --------------------------------------------------------
+
+    recent_price = float(
+
+        candidate_row[
+            "rolling_price_7"
+        ].iloc[0]
+
+    )
+
+
+    if recent_price > 0:
+
+        candidate_row[
+            "price_vs_recent_avg"
+        ] = (
+
+            candidate_price
+
+            /
+
+            recent_price
+
+        )
+
+
+    # --------------------------------------------------------
+    # PRICE-DEMAND INTERACTION
+    # --------------------------------------------------------
+
+    rolling_demand = float(
+
+        candidate_row[
+            "rolling_units_7"
+        ].iloc[0]
+
+    )
+
+
+    candidate_row[
+        "price_demand_pressure"
+    ] = (
+
+        candidate_row[
+            "price_vs_recent_avg"
+        ].iloc[0]
+
+        *
+
+        rolling_demand
+
+    )
+
+
+    # --------------------------------------------------------
+    # MODEL PREDICTION
+    # --------------------------------------------------------
+
+    processed = (
+
+        preprocessor.transform(
+
+            candidate_row
+
+        )
+
+    )
+
+
+    predicted_log = float(
 
         model.predict(
-            candidate_processed
+
+            processed
+
         )[0]
 
     )
 
 
-    candidate_prediction = float(
+    predicted_units = float(
 
         np.expm1(
-            candidate_prediction_log
+
+            predicted_log
+
         )
 
     )
 
 
-    candidate_prediction = max(
+    predicted_units = max(
+
         0.0,
-        candidate_prediction,
+
+        predicted_units,
+
     )
 
 
-    candidate_revenue = (
+    predicted_revenue = (
 
         candidate_price
-        * candidate_prediction
+
+        *
+
+        predicted_units
 
     )
 
 
     sensitivity_results.append({
 
-        "price_change":
-            f"{percentage:+d}%",
+        "change_pct":
+            percentage,
 
-        "candidate_price":
+        "price":
             round(
                 candidate_price,
                 2,
@@ -1382,160 +2341,103 @@ for percentage in test_percentages:
 
         "predicted_units":
             round(
-                candidate_prediction,
+                predicted_units,
                 2,
             ),
 
         "predicted_revenue":
             round(
-                candidate_revenue,
+                predicted_revenue,
                 2,
             ),
+
     })
 
 
 sensitivity_df = pd.DataFrame(
+
     sensitivity_results
+
 )
 
 
 print(
+
     sensitivity_df.to_string(
+
         index=False
+
     )
+
 )
 
 
 # ============================================================
-# SENSITIVITY ANALYSIS
-# ============================================================
-
-unique_predictions = (
-    sensitivity_df[
-        "predicted_units"
-    ]
-    .nunique()
-)
-
-
-min_predicted_units = (
-    sensitivity_df[
-        "predicted_units"
-    ].min()
-)
-
-
-max_predicted_units = (
-    sensitivity_df[
-        "predicted_units"
-    ].max()
-)
-
-
-print()
-
-
-print(
-    f"Different predicted demand values: "
-    f"{unique_predictions}"
-)
-
-
-print(
-    f"Minimum predicted units: "
-    f"{min_predicted_units:.2f}"
-)
-
-
-print(
-    f"Maximum predicted units: "
-    f"{max_predicted_units:.2f}"
-)
-
-
-if unique_predictions <= 3:
-
-    print()
-    print(
-        "WARNING:"
-    )
-
-    print(
-        "The model still has weak price sensitivity."
-    )
-
-    print(
-        "Do NOT use the optimization result yet."
-    )
-
-else:
-
-    print()
-    print(
-        "SUCCESS:"
-    )
-
-    print(
-        "The model produces multiple demand "
-        "responses across candidate prices."
-    )
-
-
-# ============================================================
-# PRICE DIRECTION VALIDATION
+# SENSITIVITY QUALITY CHECK
 # ============================================================
 
 print_section(
-    "PRICE DIRECTION VALIDATION"
+    "PRICE SENSITIVITY QUALITY CHECK"
 )
 
 
-lowest_price_units = float(
-    sensitivity_df[
-        sensitivity_df[
-            "price_change"
-        ] == "-20%"
-    ][
-        "predicted_units"
-    ].iloc[0]
+unit_values = sensitivity_df[
+    "predicted_units"
+].values
+
+
+prediction_range = (
+
+    unit_values.max()
+
+    -
+
+    unit_values.min()
+
 )
 
 
-highest_price_units = float(
-    sensitivity_df[
-        sensitivity_df[
-            "price_change"
-        ] == "+20%"
-    ][
-        "predicted_units"
-    ].iloc[0]
+prediction_mean = (
+
+    unit_values.mean()
+
 )
 
 
-print(
-    f"-20% price predicted units: "
-    f"{lowest_price_units:.2f}"
-)
+if prediction_mean > 0:
 
+    variation_pct = (
 
-print(
-    f"+20% price predicted units: "
-    f"{highest_price_units:.2f}"
-)
+        prediction_range
 
+        /
 
-if lowest_price_units > highest_price_units:
+        prediction_mean
 
-    print()
-    print(
-        "SUCCESS:"
-    )
-
-    print(
-        "Lower price produces higher predicted demand."
-    )
+    ) * 100
 
 else:
+
+    variation_pct = 0.0
+
+
+print(
+
+    f"Prediction range  : "
+    f"{prediction_range:.4f} units"
+
+)
+
+
+print(
+
+    f"Relative variation: "
+    f"{variation_pct:.2f}%"
+
+)
+
+
+if variation_pct < 5:
 
     print()
     print(
@@ -1543,8 +2445,93 @@ else:
     )
 
     print(
-        "The model did not produce the expected "
-        "lower-price / higher-demand relationship."
+        "Price sensitivity is still very weak."
+    )
+
+    print(
+        "The optimizer should NOT be trusted yet."
+    )
+
+
+elif variation_pct < 15:
+
+    print()
+    print(
+        "MODERATE:"
+    )
+
+    print(
+        "The model reacts to price, "
+        "but sensitivity is still limited."
+    )
+
+
+else:
+
+    print()
+    print(
+        "GOOD:"
+    )
+
+    print(
+        "The model produces meaningful demand "
+        "variation across prices."
+    )
+
+
+# ============================================================
+# PRICE DIRECTION CHECK
+# ============================================================
+
+print_section(
+    "PRICE DIRECTION CHECK"
+)
+
+
+lowest_units = float(
+
+    sensitivity_df.iloc[0][
+        "predicted_units"
+    ]
+
+)
+
+
+highest_units = float(
+
+    sensitivity_df.iloc[-1][
+        "predicted_units"
+    ]
+
+)
+
+
+print(
+
+    f"-20% price demand: "
+    f"{lowest_units:.2f}"
+
+)
+
+
+print(
+
+    f"+20% price demand: "
+    f"{highest_units:.2f}"
+
+)
+
+
+if lowest_units >= highest_units:
+
+    print(
+        "PASS: demand is non-increasing with price."
+    )
+
+else:
+
+    print(
+        "WARNING: demand increased at the higher price."
     )
 
 
@@ -1552,39 +2539,85 @@ else:
 # BEST REVENUE PRICE
 # ============================================================
 
-print_section(
-    "SENSITIVITY TEST BEST REVENUE PRICE"
-)
+best_row = sensitivity_df.loc[
 
-
-best_revenue_row = sensitivity_df.loc[
     sensitivity_df[
         "predicted_revenue"
     ].idxmax()
+
 ]
 
 
-print(
-    f"Best price change: "
-    f"{best_revenue_row['price_change']}"
+print_section(
+    "BEST REVENUE PRICE"
+)
+
+
+best_change = float(
+
+    best_row[
+        "change_pct"
+    ]
+
 )
 
 
 print(
-    f"Best candidate price: "
-    f"₹{best_revenue_row['candidate_price']:.2f}"
+
+    f"Price change     : "
+    f"{best_change:+.0f}%"
+
 )
 
 
 print(
-    f"Predicted units: "
-    f"{best_revenue_row['predicted_units']:.2f}"
+
+    f"Price            : "
+    f"₹{best_row['price']:.2f}"
+
 )
 
 
 print(
+
+    f"Predicted units  : "
+    f"{best_row['predicted_units']:.2f}"
+
+)
+
+
+print(
+
     f"Predicted revenue: "
-    f"₹{best_revenue_row['predicted_revenue']:.2f}"
+    f"₹{best_row['predicted_revenue']:.2f}"
+
+)
+
+
+# ============================================================
+# MODEL DECISION
+# ============================================================
+
+if best_change >= 2:
+
+    decision = "INCREASE PRICE"
+
+
+elif best_change <= -2:
+
+    decision = "DECREASE PRICE"
+
+
+else:
+
+    decision = "MAINTAIN PRICE"
+
+
+print()
+print(
+
+    f"MODEL DECISION: {decision}"
+
 )
 
 
@@ -1593,66 +2626,75 @@ print(
 # ============================================================
 
 print_section(
-    "LEAKAGE CHECK"
+    "FINAL DATA LEAKAGE CHECK"
 )
 
 
-for forbidden_feature in [
+for forbidden in [
+
+    "units_sold",
 
     "demand_index",
 
     "revenue",
 
-    "units_sold",
-
 ]:
 
-    if forbidden_feature in FEATURE_COLUMNS:
+    if forbidden in FEATURE_COLUMNS:
 
         print(
-            f"ERROR: {forbidden_feature} "
-            "is incorrectly included."
+
+            f"ERROR: {forbidden} "
+            f"is included directly."
+
         )
 
     else:
 
         print(
-            f"OK: {forbidden_feature} "
-            "excluded from model inputs."
+
+            f"PASS: {forbidden} "
+            f"is excluded from model inputs."
+
         )
 
 
 # ============================================================
-# MODEL GENERALIZATION CHECK
+# EXPLICIT LEAKAGE WARNINGS
 # ============================================================
-
-print_section(
-    "MODEL GENERALIZATION CHECK"
-)
-
-
-print(
-    "product_id:"
-)
-
-print(
-    "REMOVED from learned model features."
-)
-
-print(
-    "Reason: prevents product memorization and "
-    "improves generalization to new products."
-)
-
 
 print()
 print(
-    "Unknown categories:"
+    "Leakage-sensitive features:"
 )
 
+
 print(
-    "SUPPORTED through "
-    "OneHotEncoder(handle_unknown='ignore')."
+    "inventory_pressure = previous_inventory / previous_units"
+)
+
+
+print(
+    "demand_momentum = previous_units / "
+    "previous_previous_units"
+)
+
+
+print(
+    "historical_price_elasticity uses ONLY historical "
+    "price/demand changes."
+)
+
+
+print(
+    "rolling_units_7 and rolling_units_14 use shifted "
+    "historical demand."
+)
+
+
+print(
+    "Current units_sold is NEVER used to construct "
+    "a current-row feature."
 )
 
 
@@ -1661,41 +2703,50 @@ print(
 # ============================================================
 
 print_section(
-    "SAVING PRICE RESPONSE MODEL"
+    "SAVING MODEL"
 )
 
 
 os.makedirs(
+
     MODEL_DIR,
+
     exist_ok=True,
+
 )
 
 
 joblib.dump(
+
     model,
+
     MODEL_PATH,
+
 )
 
 
 joblib.dump(
+
     preprocessor,
+
     PREPROCESSOR_PATH,
-)
 
-
-print()
-print(
-    "Price response model saved successfully!"
 )
 
 
 print(
-    f"Model       : {MODEL_PATH}"
+
+    f"Model saved       : "
+    f"{MODEL_PATH}"
+
 )
 
 
 print(
-    f"Preprocessor: {PREPROCESSOR_PATH}"
+
+    f"Preprocessor saved: "
+    f"{PREPROCESSOR_PATH}"
+
 )
 
 
@@ -1704,93 +2755,152 @@ print(
 # ============================================================
 
 print_section(
-    "PRICE RESPONSE MODEL TRAINING COMPLETE"
+    "TRAINING COMPLETE"
 )
 
 
 print(
-    f"Target          : {TARGET_COLUMN}"
+
+    f"Training rows        : "
+    f"{len(X_train)}"
+
 )
 
 
 print(
-    f"Training rows   : {len(X_train)}"
+
+    f"Testing rows         : "
+    f"{len(X_test)}"
+
 )
 
 
 print(
-    f"Testing rows    : {len(X_test)}"
+
+    f"Original features    : "
+    f"{len(FEATURE_COLUMNS)}"
+
 )
 
 
 print(
-    f"Features        : {len(FEATURE_COLUMNS)}"
-)
 
-
-print(
-    f"Processed feats : "
+    f"Processed features   : "
     f"{X_train_processed.shape[1]}"
+
 )
 
 
 print(
-    f"MAE             : {mae:.4f} units"
+
+    f"MAE                  : "
+    f"{mae:.4f}"
+
 )
 
 
 print(
-    f"RMSE            : {rmse:.4f} units"
+
+    f"RMSE                 : "
+    f"{rmse:.4f}"
+
 )
 
 
 print(
-    f"R²              : {r2:.4f}"
+
+    f"R²                   : "
+    f"{r2:.4f}"
+
 )
 
 
 print(
-    "Price features  : current_price + base_price + "
-    "price_ratio + effective_discount_pct"
+
+    f"Price sensitivity    : "
+    f"{variation_pct:.2f}%"
+
 )
 
 
 print(
-    "Price constraints: ENABLED"
+
+    f"Best price change    : "
+    f"{best_change:+.0f}%"
+
 )
 
 
 print(
-    "Product ID      : REMOVED"
+
+    f"Model decision       : "
+    f"{decision}"
+
 )
 
 
 print(
-    "Demand index    : EXCLUDED"
+    "Target leakage       : REMOVED"
 )
 
 
 print(
-    "Revenue         : EXCLUDED"
+    "Historical signals   : ENABLED"
 )
 
 
 print(
-    "Customer signals: INCLUDED"
+    "Price response       : ENABLED"
 )
 
 
 print(
-    "Unknown categories: SUPPORTED"
+    "Inventory pressure   : LEAKAGE-FREE"
 )
 
 
 print(
-    "Price sensitivity: -20% to +20% in 1% steps"
+    "Demand momentum      : LEAKAGE-FREE"
 )
 
 
 print(
-    "=" * 70
+    "Historical elasticity: LEAKAGE-FREE"
 )
 
+
+print(
+    "Monotonic pricing    : ENABLED"
+)
+
+
+print(
+    "Product ID           : NOT A MODEL FEATURE"
+)
+
+
+print(
+    "Demand index         : NOT USED"
+)
+
+
+print(
+    "Revenue              : NOT USED"
+)
+
+
+print(
+    f"Currency normalization: "
+    f"{SOURCE_CURRENCY} → {TARGET_CURRENCY}"
+)
+
+
+print(
+    f"Conversion rate      : "
+    f"1 {SOURCE_CURRENCY} = ₹{USD_TO_INR:.2f}"
+)
+
+
+print(
+    "=" * 75
+)

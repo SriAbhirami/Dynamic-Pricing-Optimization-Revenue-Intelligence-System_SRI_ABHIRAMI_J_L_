@@ -1,0 +1,51 @@
+{
+    "target": "target_next_day_sales",
+    "dataset_rows": 1032,
+    "feature_count": 50,
+    "train_rows": 852,
+    "validation_rows": 90,
+    "test_rows": 90,
+    "train_period": {
+        "start": "2017-01-02",
+        "end": "2019-05-03"
+    },
+    "validation_period": {
+        "start": "2019-05-04",
+        "end": "2019-08-01"
+    },
+    "test_period": {
+        "start": "2019-08-02",
+        "end": "2019-10-30"
+    },
+    "best_model": "Random Forest",
+    "production_model_file": "demand_forecasting_model.joblib",
+    "models": {
+        "Linear Regression": {
+            "validation_mae": 1139.1410115415306,
+            "validation_rmse": 1436.1870688146312,
+            "validation_r2": -0.07068233920435585,
+            "test_mae": 2269.7536765499517,
+            "test_rmse": 4486.824784731677,
+            "test_r2": -2.1312236957478667,
+            "test_wape_percent": 27.907847294629544
+        },
+        "Random Forest": {
+            "validation_mae": 590.1986428335481,
+            "validation_rmse": 834.917274134305,
+            "validation_r2": 0.6381525570336374,
+            "test_mae": 1036.3188931922814,
+            "test_rmse": 2283.127880998378,
+            "test_r2": 0.18923246610447486,
+            "test_wape_percent": 12.742100483657135
+        },
+        "XGBoost": {
+            "validation_mae": 629.0497685329863,
+            "validation_rmse": 857.9561970520447,
+            "validation_r2": 0.617907207188765,
+            "test_mae": 978.8237464409721,
+            "test_rmse": 2277.6096458477923,
+            "test_r2": 0.19314691977023102,
+            "test_wape_percent": 12.035166602551229
+        }
+    }
+}

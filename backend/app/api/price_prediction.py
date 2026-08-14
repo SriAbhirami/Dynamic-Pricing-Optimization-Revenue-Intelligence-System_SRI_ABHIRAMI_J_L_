@@ -66,65 +66,63 @@ CUSTOMER_DATA_PATH = os.path.join(
 
 
 # ============================================================
-# CANDIDATE PRICE RANGE - DATA-GROUNDED
+# CURRENCY NORMALIZATION
 # ============================================================
-#
-# The training dataset (retail_pricing_demand_100k.csv) only
-# ever contains price_change_pct values between -50% and 0%.
-# In other words: current_price is NEVER above base_price
-# anywhere in 172,800 historical rows. The model has literally
-# never seen a price increase during training.
-#
-# XGBoost (and tree models generally) cannot extrapolate
-# reliably outside the range of values they were trained on -
-# predictions for out-of-range inputs collapse toward the
-# value of whichever leaf the input falls into, which is why
-# earlier versions of this system swung between recommending
-# ~+20% (unconstrained extrapolation bias) and, after a fixed
-# elasticity formula was hard-coded on top of the model,
-# almost always -40% (see predict_candidate() below - that
-# hard-coded formula has been removed).
-#
-# To keep recommendations inside a region the model can speak
-# to with reasonable confidence, and to avoid the optimizer
-# being forced toward an arbitrary boundary, the candidate
-# range is:
-#
-#   -20%  ->  solidly inside the observed data (25th
-#              percentile of historical price_change_pct is
-#              exactly -20%), so the model has plenty of
-#              real examples here.
-#
-#   +15%  ->  a modest excursion above the never-discounted
-#              (0%) ceiling seen in training. The trained
-#              model has a monotonic constraint forcing
-#              demand to fall (not rise) as price rises, so
-#              this direction is safe even beyond the training
-#              range; +15% keeps the *magnitude* of that
-#              extrapolation small instead of the previous
-#              +/-40%, which pushed the model far outside
-#              anything it had ever seen.
-#
-# This still lets the optimizer choose "increase", "maintain"
-# or "decrease" - it is no longer forced to hit either edge.
+
+USD_TO_INR = 85.0
+
+
+# ============================================================
+# CANDIDATE PRICE RANGE
 # ============================================================
 
 CANDIDATE_MIN_PCT = -20
 CANDIDATE_MAX_PCT = 15
 CANDIDATE_STEP_PCT = 1
 
-# Minimum predicted-revenue improvement (relative to the
-# current price) required before the optimizer will recommend
-# moving away from the current price at all. This stops the
-# optimizer from chasing noise-level model differences and
-# lets "MAINTAIN PRICE" be a genuine, reachable outcome.
+
+# ============================================================
+# REVENUE IMPROVEMENT THRESHOLD
+# ============================================================
+
 MIN_REVENUE_IMPROVEMENT_PCT = 1.0
 
-# Business guard: how far the optimizer is allowed to discount
-# when demand is strong and inventory is limited/out of stock.
-# This is an explicit, explained business constraint (not a
-# fake ML output) - see select_best_candidate().
+
+# ============================================================
+# HIGH DEMAND / LOW STOCK GUARD
+# ============================================================
+
 HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT = -8
+
+
+# ============================================================
+# PRICE POSITION INTELLIGENCE
+# ============================================================
+
+PRICE_POSITION_HEAVY_DISCOUNT_PCT = -15
+PRICE_POSITION_MODERATE_DISCOUNT_PCT = -5
+
+PRICE_POSITION_PREMIUM_PCT = 15
+
+
+# ============================================================
+# PRICE POSITION BUSINESS GUARDS
+# ============================================================
+
+HEAVILY_DISCOUNTED_MAX_ADDITIONAL_DISCOUNT_PCT = -5
+
+PREMIUM_PRICE_MIN_REVENUE_IMPROVEMENT_PCT = 3.0
+
+
+# ============================================================
+# BOUNDARY DETECTION
+# ============================================================
+
+BOUNDARY_TOLERANCE_PCT = 0.01
+
+BOUNDARY_REVENUE_MARGIN_PCT = 0.5
+
+BOUNDARY_MAX_CONFIDENT_INCREASE_PCT = 10
 
 
 # ============================================================
@@ -143,6 +141,11 @@ try:
 
     print(
         "Price response model loaded successfully."
+    )
+
+    print(
+        f"Model monetary scale: INR "
+        f"(USD_TO_INR={USD_TO_INR})"
     )
 
 except Exception as error:
@@ -170,9 +173,9 @@ try:
         CUSTOMER_DATA_PATH
     )
 
-    # --------------------------------------------------------
-    # Normalize category
-    # --------------------------------------------------------
+    # ========================================================
+    # CATEGORY NORMALIZATION
+    # ========================================================
 
     customer_df["Product_Category"] = (
         customer_df["Product_Category"]
@@ -181,9 +184,34 @@ try:
         .str.lower()
     )
 
-    # --------------------------------------------------------
-    # Clean returning customer flag
-    # --------------------------------------------------------
+    # ========================================================
+    # NUMERIC CONVERSION
+    # ========================================================
+
+    numeric_columns = [
+        "Age",
+        "Unit_Price",
+        "Quantity",
+        "Discount_Amount",
+        "Total_Amount",
+        "Session_Duration_Minutes",
+        "Pages_Viewed",
+        "Delivery_Time_Days",
+        "Customer_Rating",
+    ]
+
+    for column in numeric_columns:
+
+        if column in customer_df.columns:
+
+            customer_df[column] = pd.to_numeric(
+                customer_df[column],
+                errors="coerce",
+            )
+
+    # ========================================================
+    # RETURNING CUSTOMER
+    # ========================================================
 
     customer_df["Is_Returning_Customer"] = (
         pd.to_numeric(
@@ -194,9 +222,37 @@ try:
         .astype(int)
     )
 
-    # --------------------------------------------------------
-    # Category-level customer behaviour
-    # --------------------------------------------------------
+    # ========================================================
+    # INR NORMALIZATION
+    # ========================================================
+
+    customer_monetary_columns = [
+        "Unit_Price",
+        "Discount_Amount",
+        "Total_Amount",
+    ]
+
+    for column in customer_monetary_columns:
+
+        if column in customer_df.columns:
+
+            customer_df[column] = (
+                customer_df[column]
+                * USD_TO_INR
+            )
+
+    print(
+        "Customer monetary features converted to INR."
+    )
+
+    print(
+        f"Customer monetary conversion factor: "
+        f"{USD_TO_INR}"
+    )
+
+    # ========================================================
+    # CATEGORY CUSTOMER AGGREGATION
+    # ========================================================
 
     customer_behavior = (
         customer_df
@@ -260,9 +316,9 @@ try:
         .reset_index()
     )
 
-    # --------------------------------------------------------
-    # GLOBAL customer behaviour
-    # --------------------------------------------------------
+    # ========================================================
+    # GLOBAL CUSTOMER DEFAULTS
+    # ========================================================
 
     customer_global_defaults = {
 
@@ -293,7 +349,9 @@ try:
 
         "customer_returning_rate":
             float(
-                customer_df["Is_Returning_Customer"].mean()
+                customer_df[
+                    "Is_Returning_Customer"
+                ].mean()
             ),
 
         "customer_avg_session_duration":
@@ -408,7 +466,6 @@ class ProductPricingAnalysisResponse(BaseModel):
     current_price: float
 
     stock: int
-
     base_price: float
     demand_index: float
     units_sold: int
@@ -434,7 +491,475 @@ class ProductPricingAnalysisResponse(BaseModel):
 
 
 # ============================================================
-# BUILD MODEL INPUT - FIXED
+# CATEGORY NORMALIZATION
+# ============================================================
+
+def normalize_category(
+    category
+):
+
+    normalized = (
+        str(category)
+        .strip()
+        .lower()
+    )
+
+    if not normalized or normalized == "none":
+
+        normalized = "unknown"
+
+    return normalized
+
+
+# ============================================================
+# HISTORICAL MARKET FEATURES
+# ============================================================
+
+def get_historical_market_features(
+    product,
+    db,
+    current_price,
+):
+
+    category = normalize_category(
+        product.category
+    )
+
+    features = {
+
+        "price_vs_category_avg": 0.0,
+
+        "rolling_price_7": current_price,
+
+        "price_vs_recent_avg": 0.0,
+
+        "rolling_units_7": 0.0,
+
+        "rolling_units_14": 0.0,
+
+        "demand_momentum": 0.0,
+
+        "inventory_pressure": 0.0,
+
+        "historical_price_elasticity": 0.0,
+
+        "price_demand_pressure": 0.0,
+    }
+
+    try:
+
+        category_rows = (
+            db.query(PricingDemand)
+            .filter(
+                func.lower(
+                    PricingDemand.category
+                ) == category
+            )
+            .order_by(
+                PricingDemand.date.desc()
+            )
+            .limit(30)
+            .all()
+        )
+
+    except Exception as error:
+
+        print(
+            "Historical market feature query failed:",
+            error,
+        )
+
+        return features
+
+    if not category_rows:
+
+        return features
+
+    rows = []
+
+    for row in category_rows:
+
+        base_price = float(
+            row.base_price or 0
+        )
+
+        units_sold = float(
+            row.units_sold or 0
+        )
+
+        inventory_level = float(
+            row.inventory_level or 0
+        )
+
+        demand_index = float(
+            row.demand_index or 0
+        )
+
+        discount_pct = float(
+            row.discount_pct or 0
+        )
+
+        historical_price = (
+            base_price
+            * (
+                1
+                - discount_pct / 100
+            )
+        )
+
+        rows.append(
+            {
+                "price": historical_price,
+                "base_price": base_price,
+                "units_sold": units_sold,
+                "inventory": inventory_level,
+                "demand_index": demand_index,
+                "discount_pct": discount_pct,
+            }
+        )
+
+    if not rows:
+
+        return features
+
+    history = pd.DataFrame(
+        rows
+    )
+
+    category_avg_price = float(
+        history["price"].mean()
+    )
+
+    recent_history = history.head(
+        min(
+            7,
+            len(history)
+        )
+    )
+
+    recent_price_avg = float(
+        recent_history["price"].mean()
+    )
+
+    if category_avg_price > 0:
+
+        price_vs_category_avg = (
+            (
+                current_price
+                - category_avg_price
+            )
+            / category_avg_price
+        ) * 100
+
+    else:
+
+        price_vs_category_avg = 0.0
+
+    if recent_price_avg > 0:
+
+        price_vs_recent_avg = (
+            (
+                current_price
+                - recent_price_avg
+            )
+            / recent_price_avg
+        ) * 100
+
+    else:
+
+        price_vs_recent_avg = 0.0
+
+    rolling_price_7 = float(
+        recent_history["price"].mean()
+    )
+
+    rolling_price_14 = float(
+        history.head(
+            min(
+                14,
+                len(history)
+            )
+        )["price"].mean()
+    )
+
+    rolling_units_7 = float(
+        recent_history["units_sold"].mean()
+    )
+
+    rolling_units_14 = float(
+        history.head(
+            min(
+                14,
+                len(history)
+            )
+        )["units_sold"].mean()
+    )
+
+    if len(history) >= 14:
+
+        recent_demand = float(
+            history.head(
+                7
+            )["demand_index"].mean()
+        )
+
+        previous_demand = float(
+            history.iloc[
+                7:14
+            ]["demand_index"].mean()
+        )
+
+        if previous_demand != 0:
+
+            demand_momentum = (
+                (
+                    recent_demand
+                    - previous_demand
+                )
+                / abs(previous_demand)
+            ) * 100
+
+        else:
+
+            demand_momentum = 0.0
+
+    else:
+
+        demand_momentum = 0.0
+
+    average_inventory = float(
+        history["inventory"].mean()
+    )
+
+    current_inventory = float(
+        product.stock
+    )
+
+    if average_inventory > 0:
+
+        inventory_pressure = (
+            (
+                average_inventory
+                - current_inventory
+            )
+            / average_inventory
+        ) * 100
+
+    else:
+
+        inventory_pressure = 0.0
+
+    # ========================================================
+    # HISTORICAL PRICE ELASTICITY
+    # ========================================================
+
+    elasticity_values = []
+
+    if len(history) >= 2:
+
+        for index in range(
+            len(history) - 1
+        ):
+
+            current_row = history.iloc[
+                index
+            ]
+
+            previous_row = history.iloc[
+                index + 1
+            ]
+
+            previous_price = float(
+                previous_row["price"]
+            )
+
+            previous_units = float(
+                previous_row["units_sold"]
+            )
+
+            current_price_hist = float(
+                current_row["price"]
+            )
+
+            current_units = float(
+                current_row["units_sold"]
+            )
+
+            if (
+                previous_price > 0
+                and previous_units > 0
+            ):
+
+                price_change = (
+                    (
+                        current_price_hist
+                        - previous_price
+                    )
+                    / previous_price
+                )
+
+                units_change = (
+                    (
+                        current_units
+                        - previous_units
+                    )
+                    / previous_units
+                )
+
+                if abs(price_change) > 0.001:
+
+                    elasticity = (
+                        units_change
+                        / price_change
+                    )
+
+                    if (
+                        pd.notna(elasticity)
+                        and abs(elasticity) < 10
+                    ):
+
+                        elasticity_values.append(
+                            elasticity
+                        )
+
+    if elasticity_values:
+
+        historical_price_elasticity = float(
+            sum(elasticity_values)
+            / len(elasticity_values)
+        )
+
+    else:
+
+        historical_price_elasticity = 0.0
+
+    average_demand = float(
+        history["demand_index"].mean()
+    )
+
+    if category_avg_price > 0:
+
+        relative_price = (
+            current_price
+            / category_avg_price
+        )
+
+    else:
+
+        relative_price = 1.0
+
+    if average_demand > 0:
+
+        demand_strength = (
+            average_demand
+            / 100
+        )
+
+    else:
+
+        demand_strength = 0.0
+
+    price_demand_pressure = (
+        relative_price
+        * demand_strength
+        * 100
+    )
+
+    features.update(
+        {
+
+            "price_vs_category_avg":
+                float(
+                    price_vs_category_avg
+                ),
+
+            "rolling_price_7":
+                float(
+                    rolling_price_7
+                ),
+
+            "price_vs_recent_avg":
+                float(
+                    price_vs_recent_avg
+                ),
+
+            "rolling_units_7":
+                float(
+                    rolling_units_7
+                ),
+
+            "rolling_units_14":
+                float(
+                    rolling_units_14
+                ),
+
+            "demand_momentum":
+                float(
+                    demand_momentum
+                ),
+
+            "inventory_pressure":
+                float(
+                    inventory_pressure
+                ),
+
+            "historical_price_elasticity":
+                float(
+                    historical_price_elasticity
+                ),
+
+            "price_demand_pressure":
+                float(
+                    price_demand_pressure
+                ),
+        }
+    )
+
+    print(
+        "[MARKET FEATURES]"
+    )
+
+    print(
+        f"Category={category}"
+    )
+
+    print(
+        f"Category Avg Price=₹{category_avg_price:.2f}"
+    )
+
+    print(
+        f"Current Price=₹{current_price:.2f}"
+    )
+
+    print(
+        f"Price Position={price_vs_category_avg:.2f}%"
+    )
+
+    print(
+        f"Recent Price Avg=₹{recent_price_avg:.2f}"
+    )
+
+    print(
+        f"Demand Momentum={demand_momentum:.2f}%"
+    )
+
+    print(
+        f"Inventory Pressure={inventory_pressure:.2f}%"
+    )
+
+    print(
+        f"Historical Elasticity={historical_price_elasticity:.4f}"
+    )
+
+    print(
+        f"Price-Demand Pressure={price_demand_pressure:.2f}"
+    )
+
+    return features
+
+
+# ============================================================
+# BUILD MODEL INPUT
 # ============================================================
 
 def build_model_input(
@@ -446,38 +971,60 @@ def build_model_input(
     average_demand_index,
     current_price,
     candidate_price,
+    db,
 ):
 
     today = pd.Timestamp.today()
 
-    category = (
-        str(product.category)
-        .strip()
-        .lower()
+    category = normalize_category(
+        product.category
     )
 
-    if not category or category == "none":
-        category = "unknown"
-
     # ========================================================
-    # PRICE RESPONSE FEATURES - FIXED
+    # PRICE RESPONSE FEATURES
     # ========================================================
 
-    # Use the actual current price as reference
     reference_price = current_price
 
     if reference_price <= 0:
+
         reference_price = candidate_price
 
-    price_ratio = candidate_price / reference_price
+    price_ratio = (
+        candidate_price
+        / reference_price
+    )
 
     effective_discount_pct = (
-        (reference_price - candidate_price)
+        (
+            reference_price
+            - candidate_price
+        )
         / reference_price
     ) * 100
 
+    price_change_pct = (
+        (
+            candidate_price
+            - current_price
+        )
+        / current_price
+    ) * 100
+
     # ========================================================
-    # CUSTOMER BEHAVIOUR FEATURES
+    # HISTORICAL MARKET FEATURES
+    # ========================================================
+
+    market_features = (
+        get_historical_market_features(
+            product=product,
+            db=db,
+            current_price=current_price,
+        )
+    )
+
+    # ========================================================
+    # CUSTOMER BEHAVIOUR
     # ========================================================
 
     customer_features = {}
@@ -501,63 +1048,85 @@ def build_model_input(
             customer_features = {
 
                 "customer_avg_age":
-                    customer_row[
-                        "customer_avg_age"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_age"
+                        ]
+                    ),
 
                 "customer_avg_unit_price":
-                    customer_row[
-                        "customer_avg_unit_price"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_unit_price"
+                        ]
+                    ),
 
                 "customer_avg_quantity":
-                    customer_row[
-                        "customer_avg_quantity"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_quantity"
+                        ]
+                    ),
 
                 "customer_avg_discount_amount":
-                    customer_row[
-                        "customer_avg_discount_amount"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_discount_amount"
+                        ]
+                    ),
 
                 "customer_avg_order_value":
-                    customer_row[
-                        "customer_avg_order_value"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_order_value"
+                        ]
+                    ),
 
                 "customer_returning_rate":
-                    customer_row[
-                        "customer_returning_rate"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_returning_rate"
+                        ]
+                    ),
 
                 "customer_avg_session_duration":
-                    customer_row[
-                        "customer_avg_session_duration"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_session_duration"
+                        ]
+                    ),
 
                 "customer_avg_pages_viewed":
-                    customer_row[
-                        "customer_avg_pages_viewed"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_pages_viewed"
+                        ]
+                    ),
 
                 "customer_avg_delivery_time":
-                    customer_row[
-                        "customer_avg_delivery_time"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_delivery_time"
+                        ]
+                    ),
 
                 "customer_avg_rating":
-                    customer_row[
-                        "customer_avg_rating"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_avg_rating"
+                        ]
+                    ),
 
                 "customer_order_count":
-                    customer_row[
-                        "customer_order_count"
-                    ],
+                    float(
+                        customer_row[
+                            "customer_order_count"
+                        ]
+                    ),
             }
 
     # ========================================================
-    # FALLBACK CUSTOMER VALUES
+    # CUSTOMER FALLBACK
     # ========================================================
 
     if not customer_features:
@@ -572,33 +1141,42 @@ def build_model_input(
 
             customer_features = {
 
-                "customer_avg_age": 35.0,
+                "customer_avg_age":
+                    35.0,
 
                 "customer_avg_unit_price":
                     average_base_price,
 
-                "customer_avg_quantity": 3.0,
+                "customer_avg_quantity":
+                    3.0,
 
-                "customer_avg_discount_amount": 0.0,
+                "customer_avg_discount_amount":
+                    0.0,
 
                 "customer_avg_order_value":
                     average_base_price * 3,
 
-                "customer_returning_rate": 0.88,
+                "customer_returning_rate":
+                    0.88,
 
-                "customer_avg_session_duration": 14.5,
+                "customer_avg_session_duration":
+                    14.5,
 
-                "customer_avg_pages_viewed": 9.0,
+                "customer_avg_pages_viewed":
+                    9.0,
 
-                "customer_avg_delivery_time": 6.5,
+                "customer_avg_delivery_time":
+                    6.5,
 
-                "customer_avg_rating": 3.9,
+                "customer_avg_rating":
+                    3.9,
 
-                "customer_order_count": 2000,
+                "customer_order_count":
+                    2000,
             }
 
     # ========================================================
-    # CATEGORICAL FALLBACKS
+    # CATEGORICAL FEATURES
     # ========================================================
 
     if latest_category_data is not None:
@@ -652,48 +1230,190 @@ def build_model_input(
         promotion_type = "unknown"
 
     # ========================================================
-    # BUILD MODEL INPUT ROW - FIXED current_price
+    # PREVIOUS INVENTORY
+    # ========================================================
+    #
+    # IMPORTANT:
+    #
+    # The trained price-response preprocessor expects
+    # "previous_inventory".
+    #
+    # During live inference we use the latest available
+    # historical inventory as the best approximation.
+    #
+    # Priority:
+    #
+    # 1. Latest historical inventory
+    # 2. Average historical inventory
+    # 3. Current product stock
+    #
+    # ========================================================
+
+    if (
+        latest_category_data is not None
+        and latest_category_data.inventory_level is not None
+    ):
+
+        previous_inventory = float(
+            latest_category_data.inventory_level
+        )
+
+    elif average_inventory is not None:
+
+        previous_inventory = float(
+            average_inventory
+        )
+
+    else:
+
+        previous_inventory = float(
+            product.stock
+        )
+
+    if (
+        pd.isna(previous_inventory)
+        or previous_inventory < 0
+    ):
+
+        previous_inventory = float(
+            max(
+                product.stock,
+                0,
+            )
+        )
+
+    # ========================================================
+    # BUILD MODEL INPUT
     # ========================================================
 
     input_row = {
 
         # ----------------------------------------------------
-        # PRICE FEATURES - FIXED
+        # PRICE FEATURES
         # ----------------------------------------------------
 
-        "current_price": current_price,  # FIXED: Use actual current price, not candidate
-        "base_price": average_base_price,
-        "price_ratio": price_ratio,
-        "effective_discount_pct": effective_discount_pct,
+        "current_price":
+            float(current_price),
+
+        "base_price":
+            float(average_base_price),
+
+        "price_ratio":
+            float(price_ratio),
+
+        "effective_discount_pct":
+            float(effective_discount_pct),
+
+        "price_change_pct":
+            float(price_change_pct),
 
         # ----------------------------------------------------
-        # INVENTORY FEATURES
+        # HISTORICAL MARKET FEATURES
+        # ----------------------------------------------------
+
+        "price_vs_category_avg":
+            float(
+                market_features[
+                    "price_vs_category_avg"
+                ]
+            ),
+
+        "rolling_price_7":
+            float(
+                market_features[
+                    "rolling_price_7"
+                ]
+            ),
+
+        "price_vs_recent_avg":
+            float(
+                market_features[
+                    "price_vs_recent_avg"
+                ]
+            ),
+
+        "rolling_units_7":
+            float(
+                market_features[
+                    "rolling_units_7"
+                ]
+            ),
+
+        "rolling_units_14":
+            float(
+                market_features[
+                    "rolling_units_14"
+                ]
+            ),
+
+        "demand_momentum":
+            float(
+                market_features[
+                    "demand_momentum"
+                ]
+            ),
+
+        "inventory_pressure":
+            float(
+                market_features[
+                    "inventory_pressure"
+                ]
+            ),
+
+        "historical_price_elasticity":
+            float(
+                market_features[
+                    "historical_price_elasticity"
+                ]
+            ),
+
+        "price_demand_pressure":
+            float(
+                market_features[
+                    "price_demand_pressure"
+                ]
+            ),
+
+        # ----------------------------------------------------
+        # INVENTORY
         # ----------------------------------------------------
 
         "inventory_level":
-            int(product.stock),
+            int(
+                max(
+                    product.stock,
+                    0,
+                )
+            ),
+
+        "previous_inventory":
+            float(
+                previous_inventory
+            ),
 
         "stockout_flag":
-            1 if product.stock <= 0 else 0,
+            1
+            if product.stock <= 0
+            else 0,
 
         # ----------------------------------------------------
-        # DATE FEATURES
+        # DATE
         # ----------------------------------------------------
 
         "year":
-            today.year,
+            int(today.year),
 
         "month":
-            today.month,
+            int(today.month),
 
         "day":
-            today.day,
+            int(today.day),
 
         "day_of_week":
-            today.weekday(),
+            int(today.weekday()),
 
         # ----------------------------------------------------
-        # CATEGORICAL FEATURES
+        # CATEGORICAL
         # ----------------------------------------------------
 
         "product_id":
@@ -718,13 +1438,59 @@ def build_model_input(
             promotion_type,
     }
 
+    # ========================================================
+    # CUSTOMER FEATURES
+    # ========================================================
+
     input_row.update(
         customer_features
     )
 
-    return pd.DataFrame(
+    # ========================================================
+    # DATAFRAME
+    # ========================================================
+
+    input_df = pd.DataFrame(
         [input_row]
     )
+
+    # ========================================================
+    # DEBUG
+    # ========================================================
+
+    print()
+    print(
+        "[MODEL INPUT]"
+    )
+
+    print(
+        "Input columns:"
+    )
+
+    print(
+        list(
+            input_df.columns
+        )
+    )
+
+    print(
+        f"Current inventory: "
+        f"{input_df['inventory_level'].iloc[0]}"
+    )
+
+    print(
+        f"Previous inventory: "
+        f"{input_df['previous_inventory'].iloc[0]}"
+    )
+
+    print(
+        f"Candidate price: "
+        f"₹{candidate_price:.2f}"
+    )
+
+    print()
+
+    return input_df
 
 
 # ============================================================
@@ -736,18 +1502,9 @@ def get_category_signals(
     db,
 ):
 
-    category = (
-        str(product.category)
-        .strip()
-        .lower()
+    category = normalize_category(
+        product.category
     )
-
-    if not category or category == "none":
-        category = "unknown"
-
-    # ========================================================
-    # 1. TRY CATEGORY-SPECIFIC HISTORICAL DATA
-    # ========================================================
 
     category_data = (
         db.query(
@@ -802,19 +1559,11 @@ def get_category_signals(
         .first()
     )
 
-    # ========================================================
-    # 2. DETERMINE WHETHER CATEGORY EXISTS
-    # ========================================================
-
     category_exists = (
         latest_category_data is not None
         and category_data is not None
         and category_data.average_base_price is not None
     )
-
-    # ========================================================
-    # 3. CATEGORY EXISTS
-    # ========================================================
 
     if category_exists:
 
@@ -854,10 +1603,6 @@ def get_category_signals(
             f"Historical category found: '{category}'"
         )
 
-        print(
-            "Using category-specific business signals."
-        )
-
         return (
             latest_category_data,
             average_base_price,
@@ -869,7 +1614,7 @@ def get_category_signals(
         )
 
     # ========================================================
-    # 4. CATEGORY NOT FOUND
+    # GLOBAL FALLBACK
     # ========================================================
 
     print(
@@ -922,10 +1667,6 @@ def get_category_signals(
         )
         .first()
     )
-
-    # ========================================================
-    # 5. GLOBAL FALLBACK VALUES
-    # ========================================================
 
     if global_data is not None:
 
@@ -990,7 +1731,7 @@ def get_category_signals(
 
 
 # ============================================================
-# PREDICT ONE PRICE CANDIDATE - FIXED WITH ELASTICITY
+# PREDICT ONE PRICE CANDIDATE
 # ============================================================
 
 def predict_candidate(
@@ -1002,6 +1743,7 @@ def predict_candidate(
     average_demand_index,
     current_price,
     candidate_price,
+    db,
 ):
 
     input_data = build_model_input(
@@ -1013,71 +1755,62 @@ def predict_candidate(
         average_demand_index=average_demand_index,
         current_price=current_price,
         candidate_price=candidate_price,
+        db=db,
+    )
+
+    processed_data = preprocessor.transform(
+        input_data
+    )
+
+    predicted_units = float(
+        model.predict(
+            processed_data
+        )[0]
     )
 
     # ========================================================
-    # PREPROCESS
+    # SANITY CAP
     # ========================================================
 
-    processed_data = preprocessor.transform(input_data)
+    if (
+        average_units_sold
+        and average_units_sold > 0
+    ):
 
-    # ========================================================
-    # PREDICT
-    # ========================================================
-    #
-    # IMPORTANT: We use the trained price-response model's own
-    # prediction directly, for every candidate price. There is
-    # no hard-coded elasticity formula overriding it.
-    #
-    # A previous version of this function replaced the model's
-    # prediction with a fixed formula
-    # (predicted_units = current_units * price_ratio**-1.5)
-    # whenever the candidate price differed from the current
-    # price. That formula makes predicted revenue
-    # (price * predicted_units) a strictly decreasing function
-    # of price for every product, with no dependence on the
-    # product's actual category, demand, or inventory signals -
-    # which is why the optimizer always ended up recommending
-    # the lowest boundary of the candidate range (-40%). It has
-    # been removed so the model's own (monotonic-constrained,
-    # category- and customer-behaviour-aware) prediction drives
-    # the recommendation instead.
-    # ========================================================
+        sanity_cap = max(
+            average_units_sold * 5,
+            50,
+        )
 
-    predicted_units = float(model.predict(processed_data)[0])
-
-    # ========================================================
-    # SANITY CAP - transparent business guard, not a fake
-    # ML prediction.
-    #
-    # The training data's units_sold values are bounded (see
-    # scripts/train_price_response.py print-outs). To protect
-    # against a pathological prediction for an out-of-range
-    # candidate, we cap predicted demand at a generous multiple
-    # of this category's own historical average units sold.
-    # This only ever clips extreme outliers; it does not shape
-    # the demand curve itself.
-    # ========================================================
-
-    if average_units_sold and average_units_sold > 0:
-        sanity_cap = max(average_units_sold * 5, 50)
     else:
+
         sanity_cap = 10000
 
-    predicted_units = max(0.0, min(predicted_units, sanity_cap))
-
-    predicted_revenue = candidate_price * predicted_units
+    predicted_units = max(
+        0.0,
+        min(
+            predicted_units,
+            sanity_cap,
+        ),
+    )
 
     # ========================================================
-    # DEBUG LOGGING
+    # REVENUE IS INR
     # ========================================================
+
+    predicted_revenue = (
+        candidate_price
+        * predicted_units
+    )
 
     print(
         f"[PRICE DEBUG] "
-        f"Current={current_price:.2f} | "
-        f"Candidate={candidate_price:.2f} | "
+        f"Current=₹{current_price:.2f} | "
+        f"Candidate=₹{candidate_price:.2f} | "
+        f"Change="
+        f"{((candidate_price-current_price)/current_price)*100:+.1f}% | "
         f"Units={predicted_units:.2f} | "
-        f"Revenue={predicted_revenue:.2f}"
+        f"Revenue=₹{predicted_revenue:.2f}"
     )
 
     return (
@@ -1087,39 +1820,295 @@ def predict_candidate(
 
 
 # ============================================================
-# SELECT BEST CANDIDATE - BUSINESS-AWARE OPTIMIZATION
+# PRICE POSITION INTELLIGENCE
 # ============================================================
-#
-# Plain revenue-argmax over a wide candidate grid is what
-# caused the system to repeatedly hit a boundary. This
-# function keeps predicted revenue as the primary signal, but
-# applies two transparent, explainable business constraints on
-# top of it instead of trusting a single number blindly:
-#
-# 1. MINIMUM IMPROVEMENT THRESHOLD
-#    A candidate other than the current price must beat the
-#    current price's predicted revenue by more than
-#    MIN_REVENUE_IMPROVEMENT_PCT before it is preferred. This
-#    stops the optimizer from moving the price for a
-#    fraction-of-a-percent difference that is well within the
-#    model's own noise, and makes "MAINTAIN PRICE" a reachable,
-#    genuine outcome rather than a coincidence.
-#
-# 2. HIGH-DEMAND / LOW-INVENTORY DISCOUNT GUARD
-#    If a product has strong historical demand (demand_index)
-#    AND limited/out-of-stock inventory, deep discounting is
-#    poor business practice even if the model's revenue curve
-#    (extrapolating from average, not scarcity-aware, training
-#    data) suggests a large discount looks attractive. In that
-#    situation, candidates below
-#    HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT are excluded from
-#    consideration. This mirrors the business rule requested:
-#    "high demand + low inventory should generally not result
-#    in a huge discount."
-#
-# No product ever has its price forced to a hardcoded value -
-# this only narrows or reorders which of the model's own
-# candidate predictions are eligible to win.
+
+def get_price_position(
+    current_price,
+    market_features,
+):
+
+    position = float(
+        market_features.get(
+            "price_vs_category_avg",
+            0.0,
+        )
+    )
+
+    if position <= PRICE_POSITION_HEAVY_DISCOUNT_PCT:
+
+        label = "HEAVILY DISCOUNTED"
+
+    elif position <= PRICE_POSITION_MODERATE_DISCOUNT_PCT:
+
+        label = "BELOW CATEGORY AVERAGE"
+
+    elif position >= PRICE_POSITION_PREMIUM_PCT:
+
+        label = "PREMIUM PRICED"
+
+    else:
+
+        label = "AROUND CATEGORY AVERAGE"
+
+    return (
+        position,
+        label,
+    )
+
+
+# ============================================================
+# BOUNDARY DETECTION
+# ============================================================
+
+def detect_boundary_pressure(
+    candidates,
+    current_price,
+):
+
+    if not candidates:
+
+        return {
+            "at_lower_boundary": False,
+            "at_upper_boundary": False,
+            "boundary_pressure": False,
+            "upper_boundary_change": 0.0,
+            "lower_boundary_change": 0.0,
+            "best_change": 0.0,
+        }
+
+    best_candidate = max(
+        candidates,
+        key=lambda item:
+            item.predicted_revenue,
+    )
+
+    lower_candidate = min(
+        candidates,
+        key=lambda item:
+            item.candidate_price,
+    )
+
+    upper_candidate = max(
+        candidates,
+        key=lambda item:
+            item.candidate_price,
+    )
+
+    best_change = (
+        (
+            best_candidate.candidate_price
+            - current_price
+        )
+        / current_price
+    ) * 100
+
+    lower_change = (
+        (
+            lower_candidate.candidate_price
+            - current_price
+        )
+        / current_price
+    ) * 100
+
+    upper_change = (
+        (
+            upper_candidate.candidate_price
+            - current_price
+        )
+        / current_price
+    ) * 100
+
+    at_lower_boundary = (
+        abs(
+            best_candidate.candidate_price
+            - lower_candidate.candidate_price
+        )
+        <= current_price
+        * BOUNDARY_TOLERANCE_PCT
+    )
+
+    at_upper_boundary = (
+        abs(
+            best_candidate.candidate_price
+            - upper_candidate.candidate_price
+        )
+        <= current_price
+        * BOUNDARY_TOLERANCE_PCT
+    )
+
+    return {
+
+        "at_lower_boundary":
+            at_lower_boundary,
+
+        "at_upper_boundary":
+            at_upper_boundary,
+
+        "boundary_pressure":
+            (
+                at_lower_boundary
+                or at_upper_boundary
+            ),
+
+        "upper_boundary_change":
+            upper_change,
+
+        "lower_boundary_change":
+            lower_change,
+
+        "best_change":
+            best_change,
+    }
+
+
+# ============================================================
+# APPLY PRICE POSITION GUARD
+# ============================================================
+
+def apply_price_position_guard(
+    candidates,
+    current_price,
+    average_demand_index,
+    stock,
+    market_features,
+):
+
+    if not candidates:
+
+        return candidates
+
+    price_position, price_position_label = (
+        get_price_position(
+            current_price,
+            market_features,
+        )
+    )
+
+    current_candidate = min(
+        candidates,
+        key=lambda item:
+            abs(
+                item.candidate_price
+                - current_price
+            ),
+    )
+
+    baseline_revenue = (
+        current_candidate.predicted_revenue
+    )
+
+    is_high_demand = (
+        average_demand_index >= 200
+    )
+
+    is_low_inventory = (
+        stock <= 50
+    )
+
+    eligible_candidates = []
+
+    for candidate in candidates:
+
+        change_pct = (
+            (
+                candidate.candidate_price
+                - current_price
+            )
+            / current_price
+        ) * 100
+
+        # ====================================================
+        # HIGH DEMAND + LOW STOCK
+        # ====================================================
+
+        if (
+            is_high_demand
+            and is_low_inventory
+            and change_pct
+            < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
+        ):
+
+            continue
+
+        # ====================================================
+        # HEAVILY DISCOUNTED
+        # ====================================================
+
+        if (
+            price_position
+            <= PRICE_POSITION_HEAVY_DISCOUNT_PCT
+            and change_pct
+            < HEAVILY_DISCOUNTED_MAX_ADDITIONAL_DISCOUNT_PCT
+        ):
+
+            if baseline_revenue > 0:
+
+                improvement = (
+                    (
+                        candidate.predicted_revenue
+                        - baseline_revenue
+                    )
+                    / baseline_revenue
+                ) * 100
+
+            else:
+
+                improvement = 0.0
+
+            if (
+                improvement
+                < MIN_REVENUE_IMPROVEMENT_PCT * 2
+            ):
+
+                continue
+
+        # ====================================================
+        # PREMIUM PRICED
+        # ====================================================
+
+        if (
+            price_position
+            >= PRICE_POSITION_PREMIUM_PCT
+            and change_pct > 0
+        ):
+
+            if baseline_revenue > 0:
+
+                improvement = (
+                    (
+                        candidate.predicted_revenue
+                        - baseline_revenue
+                    )
+                    / baseline_revenue
+                ) * 100
+
+            else:
+
+                improvement = 0.0
+
+            if (
+                improvement
+                < PREMIUM_PRICE_MIN_REVENUE_IMPROVEMENT_PCT
+            ):
+
+                continue
+
+        eligible_candidates.append(
+            candidate
+        )
+
+    if not eligible_candidates:
+
+        eligible_candidates = [
+            current_candidate
+        ]
+
+    return eligible_candidates
+
+
+# ============================================================
+# SELECT BEST CANDIDATE
 # ============================================================
 
 def select_best_candidate(
@@ -1127,78 +2116,159 @@ def select_best_candidate(
     current_price,
     average_demand_index,
     stock,
+    market_features,
 ):
 
-    # --------------------------------------------------------
-    # Locate the candidate closest to the current price, to use
-    # as the revenue baseline.
-    # --------------------------------------------------------
+    if not candidates:
+
+        return None
 
     current_candidate = min(
         candidates,
-        key=lambda item: abs(item.candidate_price - current_price),
+        key=lambda item:
+            abs(
+                item.candidate_price
+                - current_price
+            ),
     )
 
-    baseline_revenue = current_candidate.predicted_revenue
+    baseline_revenue = (
+        current_candidate.predicted_revenue
+    )
 
-    # --------------------------------------------------------
-    # Apply the high-demand / low-inventory discount guard.
-    # --------------------------------------------------------
-
-    is_high_demand = average_demand_index >= 200
-    is_low_inventory = stock <= 50
-
-    eligible_candidates = []
-
-    for candidate in candidates:
-
-        candidate_change_pct = (
-            (candidate.candidate_price - current_price)
-            / current_price
-            * 100
+    eligible_candidates = (
+        apply_price_position_guard(
+            candidates=candidates,
+            current_price=current_price,
+            average_demand_index=average_demand_index,
+            stock=stock,
+            market_features=market_features,
         )
-
-        if (
-            is_high_demand
-            and is_low_inventory
-            and candidate_change_pct < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
-        ):
-            continue
-
-        eligible_candidates.append(candidate)
-
-    if not eligible_candidates:
-        eligible_candidates = candidates
-
-    # --------------------------------------------------------
-    # Pick the eligible candidate with the highest predicted
-    # revenue.
-    # --------------------------------------------------------
+    )
 
     best_candidate = max(
         eligible_candidates,
-        key=lambda item: item.predicted_revenue,
+        key=lambda item:
+            item.predicted_revenue,
     )
-
-    # --------------------------------------------------------
-    # Apply the minimum-improvement threshold: only move away
-    # from the current price if the improvement is decisive.
-    # --------------------------------------------------------
 
     if baseline_revenue > 0:
 
         improvement_pct = (
-            (best_candidate.predicted_revenue - baseline_revenue)
+            (
+                best_candidate.predicted_revenue
+                - baseline_revenue
+            )
             / baseline_revenue
-            * 100
-        )
+        ) * 100
 
     else:
 
         improvement_pct = 0.0
 
-    if improvement_pct < MIN_REVENUE_IMPROVEMENT_PCT:
+    if (
+        improvement_pct
+        < MIN_REVENUE_IMPROVEMENT_PCT
+    ):
+
         return current_candidate
+
+    boundary_info = (
+        detect_boundary_pressure(
+            candidates=candidates,
+            current_price=current_price,
+        )
+    )
+
+    # ========================================================
+    # UPPER BOUNDARY
+    # ========================================================
+
+    if boundary_info[
+        "at_upper_boundary"
+    ]:
+
+        best_change = boundary_info[
+            "best_change"
+        ]
+
+        if (
+            best_change
+            > BOUNDARY_MAX_CONFIDENT_INCREASE_PCT
+        ):
+
+            interior_candidates = [
+                candidate
+                for candidate in eligible_candidates
+                if (
+                    (
+                        candidate.candidate_price
+                        - current_price
+                    )
+                    / current_price
+                ) * 100
+                <= BOUNDARY_MAX_CONFIDENT_INCREASE_PCT
+            ]
+
+            if interior_candidates:
+
+                interior_best = max(
+                    interior_candidates,
+                    key=lambda item:
+                        item.predicted_revenue,
+                )
+
+                if baseline_revenue > 0:
+
+                    interior_improvement = (
+                        (
+                            interior_best.predicted_revenue
+                            - baseline_revenue
+                        )
+                        / baseline_revenue
+                    ) * 100
+
+                else:
+
+                    interior_improvement = 0.0
+
+                if (
+                    interior_improvement
+                    >= MIN_REVENUE_IMPROVEMENT_PCT
+                ):
+
+                    return interior_best
+
+    # ========================================================
+    # LOWER BOUNDARY
+    # ========================================================
+
+    if boundary_info[
+        "at_lower_boundary"
+    ]:
+
+        price_position = float(
+            market_features.get(
+                "price_vs_category_avg",
+                0.0,
+            )
+        )
+
+        if (
+            price_position
+            <= PRICE_POSITION_HEAVY_DISCOUNT_PCT
+        ):
+
+            current_candidate = min(
+                eligible_candidates,
+                key=lambda item:
+                    abs(
+                        item.candidate_price
+                        - current_price
+                    ),
+            )
+
+            return current_candidate
 
     return best_candidate
 
@@ -1215,18 +2285,28 @@ def build_pricing_factors(
     average_discount_pct,
     current_price,
     recommended_price,
+    market_features=None,
 ):
 
     factors = []
 
-    # Demand
+    if market_features is None:
+
+        market_features = {}
+
+    # ========================================================
+    # DEMAND
+    # ========================================================
+
     if average_demand_index >= 200:
 
         factors.append(
             PricingFactor(
                 factor="Demand",
                 value=f"{average_demand_index:.2f}",
-                impact="High demand supports higher pricing."
+                impact=(
+                    "High demand supports stronger pricing power."
+                ),
             )
         )
 
@@ -1236,7 +2316,9 @@ def build_pricing_factors(
             PricingFactor(
                 factor="Demand",
                 value=f"{average_demand_index:.2f}",
-                impact="Moderate demand supports current pricing."
+                impact=(
+                    "Moderate demand supports current pricing."
+                ),
             )
         )
 
@@ -1246,28 +2328,42 @@ def build_pricing_factors(
             PricingFactor(
                 factor="Demand",
                 value=f"{average_demand_index:.2f}",
-                impact="Lower demand favors competitive pricing."
+                impact=(
+                    "Lower demand favors competitive pricing."
+                ),
             )
         )
 
-    # Inventory
+    # ========================================================
+    # INVENTORY
+    # ========================================================
+
     factors.append(
         PricingFactor(
             factor="Inventory",
-            value=str(average_inventory),
+            value=str(
+                int(product.stock)
+            ),
             impact=(
                 "Healthy inventory."
-                if average_inventory > 150
+                if product.stock > 150
+                else "Moderate inventory."
+                if product.stock > 50
                 else "Limited inventory."
             ),
         )
     )
 
-    # Sales
+    # ========================================================
+    # SALES
+    # ========================================================
+
     factors.append(
         PricingFactor(
             factor="Average Units Sold",
-            value=str(average_units_sold),
+            value=str(
+                average_units_sold
+            ),
             impact=(
                 "Strong sales."
                 if average_units_sold >= 500
@@ -1278,7 +2374,10 @@ def build_pricing_factors(
         )
     )
 
-    # Discount
+    # ========================================================
+    # DISCOUNT
+    # ========================================================
+
     factors.append(
         PricingFactor(
             factor="Historical Discount",
@@ -1291,17 +2390,106 @@ def build_pricing_factors(
         )
     )
 
-    # Price recommendation
-    change = (
-        (recommended_price - current_price)
-        / current_price
-        * 100
+    # ========================================================
+    # PRICE POSITION
+    # ========================================================
+
+    price_position = float(
+        market_features.get(
+            "price_vs_category_avg",
+            0.0,
+        )
     )
+
+    if price_position <= -15:
+
+        position_text = (
+            "Product is already significantly below "
+            "the historical category price."
+        )
+
+    elif price_position <= -5:
+
+        position_text = (
+            "Product is priced below the historical "
+            "category average."
+        )
+
+    elif price_position >= 15:
+
+        position_text = (
+            "Product is already priced at a premium "
+            "to the historical category average."
+        )
+
+    else:
+
+        position_text = (
+            "Product price is around the historical "
+            "category range."
+        )
+
+    factors.append(
+        PricingFactor(
+            factor="Price Position",
+            value=f"{price_position:+.2f}% vs category average",
+            impact=position_text,
+        )
+    )
+
+    # ========================================================
+    # DEMAND MOMENTUM
+    # ========================================================
+
+    demand_momentum = float(
+        market_features.get(
+            "demand_momentum",
+            0.0,
+        )
+    )
+
+    if demand_momentum > 5:
+
+        momentum_text = (
+            "Recent demand is strengthening."
+        )
+
+    elif demand_momentum < -5:
+
+        momentum_text = (
+            "Recent demand is weakening."
+        )
+
+    else:
+
+        momentum_text = (
+            "Recent demand is relatively stable."
+        )
+
+    factors.append(
+        PricingFactor(
+            factor="Demand Momentum",
+            value=f"{demand_momentum:+.2f}%",
+            impact=momentum_text,
+        )
+    )
+
+    # ========================================================
+    # RECOMMENDED CHANGE
+    # ========================================================
+
+    change = (
+        (
+            recommended_price
+            - current_price
+        )
+        / current_price
+    ) * 100
 
     factors.append(
         PricingFactor(
             factor="Recommended Price Change",
-            value=f"{change:.2f}%",
+            value=f"{change:+.2f}%",
             impact=(
                 "Increase price"
                 if change > 0
@@ -1316,7 +2504,7 @@ def build_pricing_factors(
 
 
 # ============================================================
-# PRICE OPTIMIZATION ENDPOINT - FIXED WITH WIDER RANGE
+# PRICE OPTIMIZATION ENDPOINT
 # ============================================================
 
 @router.get(
@@ -1360,7 +2548,7 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 2. GET BUSINESS SIGNALS
+        # 2. BUSINESS SIGNALS
         # ====================================================
 
         (
@@ -1394,12 +2582,28 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 4. CANDIDATE PRICES - DATA-GROUNDED RANGE
+        # 4. MARKET FEATURES
         # ====================================================
 
-        # See CANDIDATE_MIN_PCT / CANDIDATE_MAX_PCT definition
-        # above for why this range was chosen instead of the
-        # previous +/-40%.
+        market_features = (
+            get_historical_market_features(
+                product=product,
+                db=db,
+                current_price=current_price,
+            )
+        )
+
+        price_position, price_position_label = (
+            get_price_position(
+                current_price,
+                market_features,
+            )
+        )
+
+        # ====================================================
+        # 5. CANDIDATES
+        # ====================================================
+
         candidate_percentages = list(
             range(
                 CANDIDATE_MIN_PCT,
@@ -1413,7 +2617,8 @@ def optimize_product_price(
             round(
                 current_price
                 * (
-                    1 + percentage / 100
+                    1
+                    + percentage / 100
                 ),
                 2,
             )
@@ -1429,7 +2634,7 @@ def optimize_product_price(
         )
 
         # ====================================================
-        # 5. PREDICT EACH CANDIDATE
+        # 6. PREDICT CANDIDATES
         # ====================================================
 
         candidates = []
@@ -1463,6 +2668,8 @@ def optimize_product_price(
 
                 candidate_price=
                     candidate_price,
+
+                db=db,
             )
 
             candidates.append(
@@ -1489,15 +2696,29 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 6. SELECT BEST CANDIDATE (BUSINESS-AWARE)
+        # 7. SELECT BEST CANDIDATE
         # ====================================================
 
-        best_candidate = select_best_candidate(
-            candidates=candidates,
-            current_price=current_price,
-            average_demand_index=average_demand_index,
-            stock=product.stock,
+        best_candidate = (
+            select_best_candidate(
+                candidates=candidates,
+                current_price=current_price,
+                average_demand_index=
+                    average_demand_index,
+                stock=product.stock,
+                market_features=
+                    market_features,
+            )
         )
+
+        if best_candidate is None:
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Unable to determine a valid price candidate."
+                ),
+            )
 
         recommended_price = (
             best_candidate.candidate_price
@@ -1512,7 +2733,7 @@ def optimize_product_price(
         )
 
         # ====================================================
-        # 7. CURRENT PRICE REVENUE
+        # 8. CURRENT PRICE BASELINE
         # ====================================================
 
         current_candidate = min(
@@ -1533,43 +2754,37 @@ def optimize_product_price(
         )
 
         # ====================================================
-        # 8. PRICE CHANGE
+        # 9. PRICE CHANGE
         # ====================================================
 
         price_change_percentage = (
-
             (
                 recommended_price
                 - current_price
             )
             / current_price
-            * 100
-
-        )
+        ) * 100
 
         # ====================================================
-        # 9. REVENUE CHANGE
+        # 10. REVENUE CHANGE
         # ====================================================
 
         if current_estimated_revenue > 0:
 
             revenue_change_percentage = (
-
                 (
                     expected_revenue
                     - current_estimated_revenue
                 )
                 / current_estimated_revenue
-                * 100
-
-            )
+            ) * 100
 
         else:
 
             revenue_change_percentage = 0.0
 
         # ====================================================
-        # 10. RECOMMENDATION
+        # 11. RECOMMENDATION
         # ====================================================
 
         if price_change_percentage >= 2:
@@ -1591,7 +2806,18 @@ def optimize_product_price(
             )
 
         # ====================================================
-        # 11. EXPLANATION
+        # 12. BOUNDARY INFORMATION
+        # ====================================================
+
+        boundary_info = (
+            detect_boundary_pressure(
+                candidates=candidates,
+                current_price=current_price,
+            )
+        )
+
+        # ====================================================
+        # 13. EXPLANATION
         # ====================================================
 
         if used_global_fallback:
@@ -1599,8 +2825,7 @@ def optimize_product_price(
             signal_text = (
                 "Because this product category was not "
                 "present in the historical dataset, the "
-                "model used overall historical pricing, "
-                "demand, inventory, and customer behaviour "
+                "model used overall historical market "
                 "signals as a fallback."
             )
 
@@ -1611,18 +2836,50 @@ def optimize_product_price(
                 "this product category."
             )
 
-        magnitude = abs(price_change_percentage)
+        magnitude = abs(
+            price_change_percentage
+        )
 
         if magnitude < 5:
+
             magnitude_text = "slight"
+
         elif magnitude < 10:
+
             magnitude_text = "moderate"
+
         else:
+
             magnitude_text = "significant"
 
         range_text = (
-            f"{CANDIDATE_MIN_PCT}% to +{CANDIDATE_MAX_PCT}%"
+            f"{CANDIDATE_MIN_PCT}% to "
+            f"+{CANDIDATE_MAX_PCT}%"
         )
+
+        boundary_text = ""
+
+        if boundary_info[
+            "at_upper_boundary"
+        ]:
+
+            boundary_text = (
+                " The model initially showed upward "
+                "boundary pressure, so price-position "
+                "intelligence was applied before selecting "
+                "the final recommendation."
+            )
+
+        elif boundary_info[
+            "at_lower_boundary"
+        ]:
+
+            boundary_text = (
+                " The model initially showed downward "
+                "boundary pressure, so the product's "
+                "existing market price position was checked "
+                "before selecting the final recommendation."
+            )
 
         if price_change_percentage > 0:
 
@@ -1631,16 +2888,18 @@ def optimize_product_price(
                 f"{len(candidates)} candidate prices from "
                 f"{range_text}. "
                 f"{signal_text} "
-                f"The highest predicted revenue among eligible "
-                f"candidates occurs at ₹{recommended_price:.2f}, "
+                f"The product is currently "
+                f"{price_position_label.lower()}, at "
+                f"{price_position:+.2f}% relative to its "
+                f"historical category price. "
+                f"The selected price is ₹{recommended_price:.2f}, "
                 f"a {magnitude_text} "
-                f"{price_change_percentage:.2f}% price increase "
-                f"that beats the current price's predicted revenue "
-                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}%. "
+                f"{price_change_percentage:.2f}% increase. "
                 f"The model predicts {expected_units:.2f} units "
-                f"sold at this price, compared with approximately "
+                f"sold at this price compared with approximately "
                 f"{current_estimated_units:.2f} units at the "
                 f"current price."
+                f"{boundary_text}"
             )
 
         elif price_change_percentage < 0:
@@ -1650,14 +2909,16 @@ def optimize_product_price(
                 f"{len(candidates)} candidate prices from "
                 f"{range_text}. "
                 f"{signal_text} "
-                f"The highest predicted revenue among eligible "
-                f"candidates occurs at ₹{recommended_price:.2f}, "
+                f"The product is currently "
+                f"{price_position_label.lower()}, at "
+                f"{price_position:+.2f}% relative to its "
+                f"historical category price. "
+                f"The selected price is ₹{recommended_price:.2f}, "
                 f"a {magnitude_text} "
-                f"{abs(price_change_percentage):.2f}% price decrease "
-                f"that beats the current price's predicted revenue "
-                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}%. "
-                f"The lower price is expected to support stronger "
-                f"demand and improve predicted revenue."
+                f"{abs(price_change_percentage):.2f}% decrease. "
+                f"The lower price is expected to improve the "
+                f"revenue-demand balance."
+                f"{boundary_text}"
             )
 
         else:
@@ -1667,84 +2928,140 @@ def optimize_product_price(
                 f"{len(candidates)} candidate prices from "
                 f"{range_text}. "
                 f"{signal_text} "
-                f"No candidate price improved predicted revenue "
-                f"by more than {MIN_REVENUE_IMPROVEMENT_PCT:.1f}% "
-                f"over the current price, so the current price is "
-                f"kept."
+                f"The product is currently "
+                f"{price_position_label.lower()}, at "
+                f"{price_position:+.2f}% relative to its "
+                f"historical category price. "
+                f"No candidate produced enough additional "
+                f"predicted revenue to justify moving away "
+                f"from the current price."
+                f"{boundary_text}"
             )
 
         # ====================================================
-        # 12. PRICING FACTORS
+        # 14. PRICING FACTORS
         # ====================================================
 
-        pricing_factors = build_pricing_factors(
+        pricing_factors = (
+            build_pricing_factors(
 
-            product=product,
+                product=product,
 
-            average_demand_index=average_demand_index,
+                average_demand_index=
+                    average_demand_index,
 
-            average_units_sold=average_units_sold,
+                average_units_sold=
+                    average_units_sold,
 
-            average_inventory=average_inventory,
+                average_inventory=
+                    average_inventory,
 
-            average_discount_pct=average_discount_pct,
+                average_discount_pct=
+                    average_discount_pct,
 
-            current_price=current_price,
+                current_price=
+                    current_price,
 
-            recommended_price=recommended_price,
+                recommended_price=
+                    recommended_price,
+
+                market_features=
+                    market_features,
+            )
         )
 
         # ====================================================
-        # 13. PRINT RESULT
+        # 15. DEBUG RESULT
         # ====================================================
 
         print()
+
         print(
             "============================================================"
         )
+
         print(
             "PRICE OPTIMIZATION RESULT"
         )
+
+        print(
+            "Currency scale: INR"
+        )
+
         print(
             "Product:",
             product.name,
         )
+
         print(
             "Product ID:",
             product.id,
         )
+
         print(
             "Category:",
             product.category,
         )
+
         print(
             "Current price:",
-            current_price,
+            f"₹{current_price:,.2f}",
         )
+
         print(
             "Recommended price:",
-            recommended_price,
+            f"₹{recommended_price:,.2f}",
         )
+
         print(
             "Price change:",
             f"{price_change_percentage:.2f}%",
         )
+
         print(
             "Revenue change:",
             f"{revenue_change_percentage:.2f}%",
         )
+
+        print(
+            "Price position:",
+            f"{price_position:+.2f}% "
+            f"({price_position_label})",
+        )
+
+        print(
+            "Demand momentum:",
+            f"{market_features.get('demand_momentum', 0):+.2f}%",
+        )
+
+        print(
+            "Boundary pressure:",
+            boundary_info[
+                "boundary_pressure"
+            ],
+        )
+
         print(
             "Recommendation:",
             recommendation,
         )
+
         print(
             "Global fallback used:",
             used_global_fallback,
         )
+
+        print(
+            "Customer monetary scale:",
+            f"INR using {USD_TO_INR}x conversion",
+        )
+
         print()
+
         print(
             "Candidate predictions:"
         )
+
         print(
             "------------------------------------------------------------"
         )
@@ -1752,20 +3069,19 @@ def optimize_product_price(
         for candidate in candidates:
 
             candidate_change = (
-
                 (
                     candidate.candidate_price
                     - current_price
                 )
                 / current_price
-                * 100
-
-            )
+            ) * 100
 
             marker = (
-                "  <-- BEST"
-                if candidate.candidate_price
-                == recommended_price
+                "  <-- SELECTED"
+                if (
+                    candidate.candidate_price
+                    == recommended_price
+                )
                 else ""
             )
 
@@ -1783,10 +3099,11 @@ def optimize_product_price(
         print(
             "============================================================"
         )
+
         print()
 
         # ====================================================
-        # 14. RETURN RESULT
+        # 16. RETURN
         # ====================================================
 
         return PriceOptimizationResponse(
@@ -1797,17 +3114,35 @@ def optimize_product_price(
 
             category=product.category,
 
-            current_price=round(current_price, 2),
+            current_price=round(
+                current_price,
+                2,
+            ),
 
-            recommended_price=round(recommended_price, 2),
+            recommended_price=round(
+                recommended_price,
+                2,
+            ),
 
-            expected_units_sold=round(expected_units, 2),
+            expected_units_sold=round(
+                expected_units,
+                2,
+            ),
 
-            expected_revenue=round(expected_revenue, 2),
+            expected_revenue=round(
+                expected_revenue,
+                2,
+            ),
 
-            price_change_percentage=round(price_change_percentage, 2),
+            price_change_percentage=round(
+                price_change_percentage,
+                2,
+            ),
 
-            revenue_change_percentage=round(revenue_change_percentage, 2),
+            revenue_change_percentage=round(
+                revenue_change_percentage,
+                2,
+            ),
 
             candidates=candidates,
 
@@ -1883,7 +3218,7 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 2. GET BUSINESS SIGNALS
+        # 2. BUSINESS SIGNALS
         # ====================================================
 
         (
@@ -1898,6 +3233,10 @@ def analyze_product_pricing(
             product,
             db,
         )
+
+        # ====================================================
+        # 3. CURRENT PRICE
+        # ====================================================
 
         current_price = float(
             product.current_price
@@ -1917,12 +3256,28 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 3. GENERATE CANDIDATES - DATA-GROUNDED RANGE
+        # 4. MARKET FEATURES
         # ====================================================
 
-        # See CANDIDATE_MIN_PCT / CANDIDATE_MAX_PCT definition
-        # near the top of this file for why this range was
-        # chosen instead of the previous +/-40%.
+        market_features = (
+            get_historical_market_features(
+                product=product,
+                db=db,
+                current_price=current_price,
+            )
+        )
+
+        price_position, price_position_label = (
+            get_price_position(
+                current_price,
+                market_features,
+            )
+        )
+
+        # ====================================================
+        # 5. GENERATE CANDIDATES
+        # ====================================================
+
         candidate_percentages = list(
             range(
                 CANDIDATE_MIN_PCT,
@@ -1938,7 +3293,8 @@ def analyze_product_pricing(
             candidate_price = round(
                 current_price
                 * (
-                    1 + percentage / 100
+                    1
+                    + percentage / 100
                 ),
                 2,
             )
@@ -1970,50 +3326,146 @@ def analyze_product_pricing(
 
                 candidate_price=
                     candidate_price,
+
+                db=db,
             )
 
             candidates.append(
                 {
-                    "price": candidate_price,
-                    "percentage": percentage,
-                    "units": predicted_units,
-                    "revenue": predicted_revenue,
+                    "price":
+                        candidate_price,
+
+                    "percentage":
+                        percentage,
+
+                    "units":
+                        predicted_units,
+
+                    "revenue":
+                        predicted_revenue,
                 }
             )
 
         # ====================================================
-        # 4. BEST PRICE (BUSINESS-AWARE)
-        # ====================================================
-        #
-        # Same two guards as select_best_candidate() above,
-        # applied here to the dict-based candidate list used
-        # by this endpoint:
-        #   1. High-demand + low-inventory discount guard
-        #   2. Minimum revenue-improvement threshold
+        # 6. CURRENT CANDIDATE
         # ====================================================
 
         current_candidate_dict = min(
             candidates,
-            key=lambda item: abs(item["price"] - current_price),
+            key=lambda item:
+                abs(
+                    item["price"]
+                    - current_price
+                ),
         )
 
-        baseline_revenue = current_candidate_dict["revenue"]
+        baseline_revenue = (
+            current_candidate_dict[
+                "revenue"
+            ]
+        )
 
-        is_high_demand = average_demand_index >= 200
-        is_low_inventory = stock <= 50
+        # ====================================================
+        # 7. APPLY PRICE POSITION GUARDS
+        # ====================================================
 
-        eligible_candidates = [
-            item
-            for item in candidates
-            if not (
+        is_high_demand = (
+            average_demand_index >= 200
+        )
+
+        is_low_inventory = (
+            stock <= 50
+        )
+
+        eligible_candidates = []
+
+        for item in candidates:
+
+            change_pct = (
+                (
+                    item["price"]
+                    - current_price
+                )
+                / current_price
+            ) * 100
+
+            if (
                 is_high_demand
                 and is_low_inventory
-                and item["percentage"] < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
+                and change_pct
+                < HIGH_DEMAND_LOW_STOCK_MAX_DISCOUNT_PCT
+            ):
+
+                continue
+
+            if (
+                price_position
+                <= PRICE_POSITION_HEAVY_DISCOUNT_PCT
+                and change_pct
+                < HEAVILY_DISCOUNTED_MAX_ADDITIONAL_DISCOUNT_PCT
+            ):
+
+                if baseline_revenue > 0:
+
+                    improvement = (
+                        (
+                            item["revenue"]
+                            - baseline_revenue
+                        )
+                        / baseline_revenue
+                    ) * 100
+
+                else:
+
+                    improvement = 0.0
+
+                if (
+                    improvement
+                    < MIN_REVENUE_IMPROVEMENT_PCT * 2
+                ):
+
+                    continue
+
+            if (
+                price_position
+                >= PRICE_POSITION_PREMIUM_PCT
+                and change_pct > 0
+            ):
+
+                if baseline_revenue > 0:
+
+                    improvement = (
+                        (
+                            item["revenue"]
+                            - baseline_revenue
+                        )
+                        / baseline_revenue
+                    ) * 100
+
+                else:
+
+                    improvement = 0.0
+
+                if (
+                    improvement
+                    < PREMIUM_PRICE_MIN_REVENUE_IMPROVEMENT_PCT
+                ):
+
+                    continue
+
+            eligible_candidates.append(
+                item
             )
-        ]
 
         if not eligible_candidates:
-            eligible_candidates = candidates
+
+            eligible_candidates = [
+                current_candidate_dict
+            ]
+
+        # ====================================================
+        # 8. REVENUE BEST
+        # ====================================================
 
         revenue_best_candidate = max(
             eligible_candidates,
@@ -2024,19 +3476,107 @@ def analyze_product_pricing(
         if baseline_revenue > 0:
 
             improvement_pct = (
-                (revenue_best_candidate["revenue"] - baseline_revenue)
+                (
+                    revenue_best_candidate[
+                        "revenue"
+                    ]
+                    - baseline_revenue
+                )
                 / baseline_revenue
-                * 100
-            )
+            ) * 100
 
         else:
 
             improvement_pct = 0.0
 
-        if improvement_pct < MIN_REVENUE_IMPROVEMENT_PCT:
-            best_candidate = current_candidate_dict
+        if (
+            improvement_pct
+            < MIN_REVENUE_IMPROVEMENT_PCT
+        ):
+
+            best_candidate = (
+                current_candidate_dict
+            )
+
         else:
-            best_candidate = revenue_best_candidate
+
+            best_candidate = (
+                revenue_best_candidate
+            )
+
+        # ====================================================
+        # 9. BOUNDARY DETECTION
+        # ====================================================
+
+        best_change = (
+            best_candidate["percentage"]
+        )
+
+        upper_boundary = (
+            CANDIDATE_MAX_PCT
+        )
+
+        lower_boundary = (
+            CANDIDATE_MIN_PCT
+        )
+
+        if (
+            best_change
+            >= upper_boundary
+        ):
+
+            interior_candidates = [
+                item
+                for item in eligible_candidates
+                if item["percentage"]
+                <= BOUNDARY_MAX_CONFIDENT_INCREASE_PCT
+            ]
+
+            if interior_candidates:
+
+                interior_best = max(
+                    interior_candidates,
+                    key=lambda item:
+                        item["revenue"],
+                )
+
+                if baseline_revenue > 0:
+
+                    interior_improvement = (
+                        (
+                            interior_best["revenue"]
+                            - baseline_revenue
+                        )
+                        / baseline_revenue
+                    ) * 100
+
+                else:
+
+                    interior_improvement = 0.0
+
+                if (
+                    interior_improvement
+                    >= MIN_REVENUE_IMPROVEMENT_PCT
+                ):
+
+                    best_candidate = (
+                        interior_best
+                    )
+
+        if (
+            best_candidate["percentage"]
+            <= lower_boundary
+            and price_position
+            <= PRICE_POSITION_HEAVY_DISCOUNT_PCT
+        ):
+
+            best_candidate = (
+                current_candidate_dict
+            )
+
+        # ====================================================
+        # 10. FINAL VALUES
+        # ====================================================
 
         predicted_price = (
             best_candidate["price"]
@@ -2052,15 +3592,12 @@ def analyze_product_pricing(
         )
 
         predicted_change_percentage = (
-
             price_difference
             / current_price
-            * 100
-
-        )
+        ) * 100
 
         # ====================================================
-        # 5. RECOMMENDATION
+        # 11. RECOMMENDATION
         # ====================================================
 
         if predicted_change_percentage >= 2:
@@ -2082,7 +3619,7 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 6. DEMAND LEVEL
+        # 12. DEMAND LEVEL
         # ====================================================
 
         if average_demand_index >= 200:
@@ -2098,7 +3635,7 @@ def analyze_product_pricing(
             demand_level = "LOW"
 
         # ====================================================
-        # 7. SALES VELOCITY
+        # 13. SALES VELOCITY
         # ====================================================
 
         if average_units_sold >= 500:
@@ -2114,7 +3651,7 @@ def analyze_product_pricing(
             sales_velocity = "LOW"
 
         # ====================================================
-        # 8. INVENTORY STATUS
+        # 14. INVENTORY STATUS
         # ====================================================
 
         if stock <= 0:
@@ -2136,7 +3673,7 @@ def analyze_product_pricing(
             inventory_status = "HEALTHY"
 
         # ====================================================
-        # 9. BUSINESS REASONS
+        # 15. BUSINESS REASONS
         # ====================================================
 
         reasons = []
@@ -2152,6 +3689,10 @@ def analyze_product_pricing(
             reasons.append(
                 "Historical data from this product category was used for the pricing analysis."
             )
+
+        # ====================================================
+        # DEMAND
+        # ====================================================
 
         if average_demand_index >= 200:
 
@@ -2171,6 +3712,10 @@ def analyze_product_pricing(
                 "Lower demand may require a more competitive price."
             )
 
+        # ====================================================
+        # SALES
+        # ====================================================
+
         if average_units_sold >= 500:
 
             reasons.append(
@@ -2188,6 +3733,10 @@ def analyze_product_pricing(
             reasons.append(
                 "Sales velocity is relatively low."
             )
+
+        # ====================================================
+        # INVENTORY
+        # ====================================================
 
         if stock <= 0:
 
@@ -2213,6 +3762,76 @@ def analyze_product_pricing(
                 "Healthy inventory provides flexibility in pricing."
             )
 
+        # ====================================================
+        # PRICE POSITION
+        # ====================================================
+
+        if price_position <= -15:
+
+            reasons.append(
+                f"The current price is {abs(price_position):.2f}% "
+                "below the historical category average, indicating "
+                "that the product is already heavily discounted."
+            )
+
+        elif price_position <= -5:
+
+            reasons.append(
+                f"The current price is {abs(price_position):.2f}% "
+                "below the historical category average."
+            )
+
+        elif price_position >= 15:
+
+            reasons.append(
+                f"The current price is {price_position:.2f}% "
+                "above the historical category average, indicating "
+                "premium positioning."
+            )
+
+        else:
+
+            reasons.append(
+                "The current price is positioned close to the historical category range."
+            )
+
+        # ====================================================
+        # DEMAND MOMENTUM
+        # ====================================================
+
+        demand_momentum = float(
+            market_features.get(
+                "demand_momentum",
+                0.0,
+            )
+        )
+
+        if demand_momentum > 5:
+
+            reasons.append(
+                f"Recent category demand is strengthening "
+                f"({demand_momentum:+.2f}%), which supports "
+                "maintaining pricing power."
+            )
+
+        elif demand_momentum < -5:
+
+            reasons.append(
+                f"Recent category demand is weakening "
+                f"({demand_momentum:+.2f}%), increasing the "
+                "importance of competitive pricing."
+            )
+
+        else:
+
+            reasons.append(
+                "Recent category demand is relatively stable."
+            )
+
+        # ====================================================
+        # DISCOUNT
+        # ====================================================
+
         if average_discount_pct > 10:
 
             reasons.append(
@@ -2225,13 +3844,17 @@ def analyze_product_pricing(
                 "Historical pricing patterns show limited discount pressure."
             )
 
+        # ====================================================
+        # FINAL RECOMMENDATION
+        # ====================================================
+
         if predicted_change_percentage <= -2:
 
             reasons.append(
                 f"The optimization engine recommends reducing "
                 f"the price by "
                 f"{abs(predicted_change_percentage):.2f}% "
-                "to maximize predicted revenue."
+                "based on the predicted revenue-demand balance."
             )
 
         elif predicted_change_percentage >= 2:
@@ -2240,7 +3863,7 @@ def analyze_product_pricing(
                 f"The optimization engine recommends increasing "
                 f"the price by "
                 f"{predicted_change_percentage:.2f}% "
-                "to maximize predicted revenue."
+                "based on the predicted revenue-demand balance."
             )
 
         else:
@@ -2250,7 +3873,7 @@ def analyze_product_pricing(
             )
 
         # ====================================================
-        # 10. RETURN
+        # 16. RETURN
         # ====================================================
 
         return ProductPricingAnalysisResponse(
