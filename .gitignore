@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Large/generated datasets
+datasets/raw/sales.csv
+datasets/forecasts/
+datasets/processed/demand_forecasting_features.csv
