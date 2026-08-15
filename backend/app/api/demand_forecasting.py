@@ -2,20 +2,19 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, extract
 
 from pathlib import Path
 import json
-import math
 
-from app.ml.demand_forecasting.predict import (
-    predict_demand
-)
+from app.ml.demand_forecasting.predict import predict_demand
 
 from app.database.database import get_db
+
+from app.models.products import Product
 from app.models.pricing_demand import PricingDemand
 from app.models.historical_sales import HistoricalSales
-from app.models.products import Product
+from app.models.seasonal_sales import SeasonalSales
 
 
 router = APIRouter(
@@ -25,7 +24,7 @@ router = APIRouter(
 
 
 # ============================================================
-# FORECAST FILE LOCATION
+# PROJECT PATHS
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -36,6 +35,204 @@ FORECAST_SUMMARY_PATH = (
     / "forecasts"
     / "forecast_summary.json"
 )
+
+
+# ============================================================
+# MONTH NAMES
+# ============================================================
+
+MONTH_NAMES = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December"
+}
+
+
+# ============================================================
+# CATEGORY MAPPING
+# ============================================================
+
+# The application product categories do not have to exactly
+# match the categories used by the historical dataset.
+#
+# Example:
+#
+# Application:
+#     Shoes
+#
+# Historical dataset:
+#     Fashion
+#
+# Therefore:
+#     Shoes -> Fashion
+#
+# This mapping is intentionally kept in the backend so that
+# the frontend only deals with the application's products.
+
+CATEGORY_MAPPING = {
+
+    # --------------------------------------------------------
+    # FASHION
+    # --------------------------------------------------------
+
+    "fashion": "Fashion",
+
+    "clothing": "Fashion",
+
+    "apparel": "Fashion",
+
+    "shoes": "Fashion",
+
+    "footwear": "Fashion",
+
+    "sneakers": "Fashion",
+
+    "bags": "Fashion",
+
+    "accessories": "Fashion",
+
+    # --------------------------------------------------------
+    # ELECTRONICS
+    # --------------------------------------------------------
+
+    "electronics": "Electronics",
+
+    "mobile": "Electronics",
+
+    "mobiles": "Electronics",
+
+    "smartphone": "Electronics",
+
+    "smartphones": "Electronics",
+
+    "phone": "Electronics",
+
+    "phones": "Electronics",
+
+    "laptop": "Electronics",
+
+    "laptops": "Electronics",
+
+    "computer": "Electronics",
+
+    "computers": "Electronics",
+
+    "tablet": "Electronics",
+
+    "tablets": "Electronics",
+
+    "gadgets": "Electronics",
+
+    # --------------------------------------------------------
+    # BEAUTY
+    # --------------------------------------------------------
+
+    "beauty": "Beauty",
+
+    "cosmetics": "Beauty",
+
+    "makeup": "Beauty",
+
+    "skincare": "Beauty",
+
+    "personal care": "Beauty",
+
+    # --------------------------------------------------------
+    # GROCERY
+    # --------------------------------------------------------
+
+    "grocery": "Grocery",
+
+    "groceries": "Grocery",
+
+    "food": "Grocery",
+
+    "foods": "Grocery",
+
+    "beverages": "Grocery",
+
+    # --------------------------------------------------------
+    # HOME
+    # --------------------------------------------------------
+
+    "home": "Home",
+
+    "home appliances": "Home",
+
+    "appliances": "Home",
+
+    "furniture": "Home",
+
+    "kitchen": "Home",
+
+    "household": "Home",
+
+    # --------------------------------------------------------
+    # SPORTS
+    # --------------------------------------------------------
+
+    "sports": "Sports",
+
+    "sport": "Sports",
+
+    "fitness": "Sports",
+
+    "gym": "Sports",
+
+    "outdoor": "Sports",
+
+    # --------------------------------------------------------
+    # TOYS
+    # --------------------------------------------------------
+
+    "toys": "Toys",
+
+    "toy": "Toys",
+
+    "games": "Toys",
+
+    "gaming": "Toys",
+}
+
+
+# ============================================================
+# CATEGORY RESOLVER
+# ============================================================
+
+def resolve_historical_category(
+    application_category: str
+) -> str:
+
+    if not application_category:
+        return ""
+
+    normalized = (
+        str(application_category)
+        .strip()
+        .lower()
+    )
+
+    # Exact mapping
+    if normalized in CATEGORY_MAPPING:
+        return CATEGORY_MAPPING[normalized]
+
+    # Partial keyword matching
+    for key, mapped_category in CATEGORY_MAPPING.items():
+
+        if key in normalized:
+            return mapped_category
+
+    # If no mapping exists, preserve original category.
+    return str(application_category).strip()
 
 
 # ============================================================
@@ -122,7 +319,7 @@ class DemandForecastSummaryResponse(BaseModel):
 
 
 # ============================================================
-# SEASONAL TREND RESPONSE
+# SEASONAL DATA POINT
 # ============================================================
 
 class SeasonalDataPoint(BaseModel):
@@ -130,13 +327,18 @@ class SeasonalDataPoint(BaseModel):
     month: str
     month_number: int
     demand: float
-    is_estimated: bool = False
 
+
+# ============================================================
+# SEASONAL RESPONSE
+# ============================================================
 
 class SeasonalTrendResponse(BaseModel):
 
     product_id: str
     product_name: str
+
+    application_category: str
     category: str
 
     seasonal_data: list[SeasonalDataPoint]
@@ -153,260 +355,9 @@ class SeasonalTrendResponse(BaseModel):
     historical_months_available: int
     estimated_months: int
 
+    historical_years: list[int]
+
     data_source: str
-
-
-# ============================================================
-# MONTH NAMES
-# ============================================================
-
-MONTH_NAMES = {
-
-    1: "January",
-    2: "February",
-    3: "March",
-    4: "April",
-    5: "May",
-    6: "June",
-    7: "July",
-    8: "August",
-    9: "September",
-    10: "October",
-    11: "November",
-    12: "December"
-
-}
-
-
-# ============================================================
-# HELPER: SAFE FLOAT
-# ============================================================
-
-def safe_float(value, default=0.0):
-
-    try:
-
-        number = float(value)
-
-        if math.isnan(number) or math.isinf(number):
-
-            return default
-
-        return number
-
-    except (TypeError, ValueError):
-
-        return default
-
-
-# ============================================================
-# HELPER: INTERPOLATE MISSING MONTHS
-# ============================================================
-
-def interpolate_monthly_values(
-    observed_values: dict[int, float]
-):
-    """
-    Build a complete January-December seasonal profile.
-
-    Existing months retain their actual historical values.
-
-    Missing months are estimated by interpolation between
-    surrounding observed months.
-
-    The interpolation is circular so December and January
-    are also treated as neighboring seasonal months.
-    """
-
-    if not observed_values:
-
-        return {}, set()
-
-
-    complete = {}
-
-    estimated_months = set()
-
-
-    observed_months = sorted(
-        observed_values.keys()
-    )
-
-
-    # --------------------------------------------------------
-    # ONLY ONE OBSERVED MONTH
-    # --------------------------------------------------------
-
-    if len(observed_months) == 1:
-
-        only_month = observed_months[0]
-
-        only_value = observed_values[only_month]
-
-        for month_number in range(1, 13):
-
-            complete[month_number] = only_value
-
-            if month_number != only_month:
-
-                estimated_months.add(
-                    month_number
-                )
-
-        return complete, estimated_months
-
-
-    # --------------------------------------------------------
-    # TWO OR MORE OBSERVED MONTHS
-    # --------------------------------------------------------
-
-    for month_number in range(1, 13):
-
-        if month_number in observed_values:
-
-            complete[month_number] = (
-                observed_values[month_number]
-            )
-
-            continue
-
-
-        # ----------------------------------------------------
-        # Find previous observed month
-        # ----------------------------------------------------
-
-        previous_candidates = [
-
-            month
-
-            for month in observed_months
-
-            if month < month_number
-
-        ]
-
-
-        if previous_candidates:
-
-            previous_month = max(
-                previous_candidates
-            )
-
-        else:
-
-            previous_month = max(
-                observed_months
-            )
-
-
-        # ----------------------------------------------------
-        # Find next observed month
-        # ----------------------------------------------------
-
-        next_candidates = [
-
-            month
-
-            for month in observed_months
-
-            if month > month_number
-
-        ]
-
-
-        if next_candidates:
-
-            next_month = min(
-                next_candidates
-            )
-
-        else:
-
-            next_month = min(
-                observed_months
-            )
-
-
-        # ----------------------------------------------------
-        # Convert circular month positions
-        # ----------------------------------------------------
-
-        previous_position = previous_month
-
-        next_position = next_month
-
-        current_position = month_number
-
-
-        if next_position <= previous_position:
-
-            next_position += 12
-
-
-        if current_position <= previous_position:
-
-            current_position += 12
-
-
-        # ----------------------------------------------------
-        # Linear interpolation
-        # ----------------------------------------------------
-
-        previous_value = safe_float(
-            observed_values[previous_month]
-        )
-
-        next_value = safe_float(
-            observed_values[next_month]
-        )
-
-
-        distance = (
-            next_position -
-            previous_position
-        )
-
-
-        if distance <= 0:
-
-            interpolated_value = (
-                previous_value +
-                next_value
-            ) / 2
-
-        else:
-
-            ratio = (
-
-                current_position -
-                previous_position
-
-            ) / distance
-
-
-            interpolated_value = (
-
-                previous_value +
-
-                (
-                    next_value -
-                    previous_value
-                ) * ratio
-
-            )
-
-
-        complete[month_number] = max(
-            0,
-            interpolated_value
-        )
-
-        estimated_months.add(
-            month_number
-        )
-
-
-    return complete, estimated_months
 
 
 # ============================================================
@@ -428,25 +379,19 @@ def predict_demand_index(
         )
 
         return {
-
-            "predicted_demand_index":
-                round(
-                    float(prediction),
-                    2
-                )
-
+            "predicted_demand_index": round(
+                float(prediction),
+                2
+            )
         }
 
     except Exception as e:
 
         raise HTTPException(
-
             status_code=500,
-
             detail=(
                 f"Demand prediction failed: {str(e)}"
             )
-
         )
 
 
@@ -460,36 +405,17 @@ def predict_demand_index(
 )
 def get_demand_forecast():
 
-    """
-    Return production demand forecasts generated by:
-
-        scripts/demand_forecaster.py
-
-    Horizons:
-
-        7 days
-        14 days
-        30 days
-        3 months
-        6 months
-        12 months
-    """
-
     try:
 
         if not FORECAST_SUMMARY_PATH.exists():
 
             raise HTTPException(
-
                 status_code=404,
-
                 detail=(
                     "Forecast summary not found. "
                     "Run scripts/demand_forecaster.py first."
                 )
-
             )
-
 
         with open(
             FORECAST_SUMMARY_PATH,
@@ -499,43 +425,30 @@ def get_demand_forecast():
 
             forecast_data = json.load(file)
 
-
         required_horizons = [
-
             "7_days",
             "14_days",
             "30_days",
             "3_months",
             "6_months",
             "12_months"
-
         ]
-
 
         missing_horizons = [
-
             horizon
-
             for horizon in required_horizons
-
             if horizon not in forecast_data
-
         ]
-
 
         if missing_horizons:
 
             raise HTTPException(
-
                 status_code=500,
-
                 detail=(
                     "Forecast summary is incomplete. "
                     f"Missing horizons: {missing_horizons}"
                 )
-
             )
-
 
         return {
 
@@ -559,203 +472,53 @@ def get_demand_forecast():
 
         }
 
-
     except HTTPException:
-
         raise
-
 
     except json.JSONDecodeError as e:
 
         raise HTTPException(
-
             status_code=500,
-
             detail=(
                 "Forecast summary JSON is invalid: "
                 f"{str(e)}"
             )
-
         )
-
 
     except Exception as e:
 
         raise HTTPException(
-
             status_code=500,
-
             detail=(
                 "Failed to load demand forecast summary: "
                 f"{str(e)}"
             )
-
-        )
-
-
-# ============================================================
-# APPLICATION PRODUCTS
-# ============================================================
-
-@router.get(
-    "/application-products"
-)
-def get_application_products(
-    db: Session = Depends(get_db)
-):
-
-    """
-    Return the products managed by PricePilot AI.
-
-    This endpoint is intentionally based on the products table,
-    not on the historical dataset product IDs.
-    """
-
-    try:
-
-        products = (
-
-            db.query(Product)
-
-            .order_by(
-                Product.name.asc()
-            )
-
-            .all()
-
-        )
-
-
-        return {
-
-            "products": [
-
-                {
-
-                    "id":
-                        product.id,
-
-                    "name":
-                        product.name,
-
-                    "category":
-                        product.category,
-
-                    "current_price":
-                        product.current_price,
-
-                    "stock":
-                        product.stock
-
-                }
-
-                for product in products
-
-            ],
-
-            "count":
-                len(products)
-
-        }
-
-
-    except Exception as e:
-
-        raise HTTPException(
-
-            status_code=500,
-
-            detail=(
-                "Failed to load application products: "
-                f"{str(e)}"
-            )
-
-        )
-
-
-# ============================================================
-# HISTORICAL PRODUCT LIST
-# ============================================================
-
-@router.get(
-    "/historical-products"
-)
-def get_historical_products(
-    db: Session = Depends(get_db)
-):
-
-    """
-    Return historical dataset product IDs.
-
-    This endpoint is retained for dataset diagnostics only.
-
-    These identifiers are NOT used by the Forecast page as
-    application products.
-    """
-
-    try:
-
-        historical_products = (
-
-            db.query(
-                HistoricalSales.product_id
-            )
-
-            .filter(
-                HistoricalSales.product_id.isnot(None)
-            )
-
-            .filter(
-                HistoricalSales.product_id != ""
-            )
-
-            .distinct()
-
-            .order_by(
-                HistoricalSales.product_id
-            )
-
-            .all()
-
-        )
-
-
-        product_ids = [
-
-            str(row.product_id)
-
-            for row in historical_products
-
-        ]
-
-
-        return {
-
-            "historical_products":
-                product_ids,
-
-            "count":
-                len(product_ids)
-
-        }
-
-
-    except Exception as e:
-
-        raise HTTPException(
-
-            status_code=500,
-
-            detail=(
-                "Failed to load historical products: "
-                f"{str(e)}"
-            )
-
         )
 
 
 # ============================================================
 # SEASONAL TREND
+#
+# IMPORTANT:
+#
+# Frontend sends:
+#
+#     /seasonal/{application_product_id}
+#
+# Example:
+#
+#     /seasonal/5
+#
+# Backend then:
+#
+#     products.id = 5
+#             ↓
+#     category = Shoes
+#             ↓
+#     historical category = Fashion
+#             ↓
+#     seasonal_sales.category = Fashion
+#
 # ============================================================
 
 @router.get(
@@ -767,67 +530,23 @@ def get_seasonal_trend(
     db: Session = Depends(get_db)
 ):
 
-    """
-    Calculate seasonal demand for an application product.
-
-    IMPORTANT:
-
-    product_id refers to the ID from the application's
-    products table.
-
-    Historical dataset IDs such as P0001/P0002 are NOT assumed
-    to match application product IDs.
-
-    The selected application's category is used to retrieve
-    historical market behavior from PricingDemand.
-
-    Missing months are interpolated so the frontend receives
-    a complete January-December seasonal profile.
-    """
-
     try:
 
-        # ====================================================
-        # NORMALIZE ID
-        # ====================================================
-
-        product_id = str(
-            product_id
-        ).strip()
-
-
-        if not product_id:
-
-            raise HTTPException(
-
-                status_code=400,
-
-                detail="Product ID cannot be empty."
-
-            )
-
-
-        # ====================================================
-        # FIND APPLICATION PRODUCT
-        # ====================================================
+        # ========================================================
+        # 1. FIND APPLICATION PRODUCT
+        # ========================================================
 
         try:
 
             application_product_id = int(
-                product_id
+                str(product_id).strip()
             )
 
         except ValueError:
 
             raise HTTPException(
-
                 status_code=400,
-
-                detail=(
-                    "Forecast product ID must belong "
-                    "to the application products table."
-                )
-
+                detail="Invalid application product ID."
             )
 
 
@@ -848,105 +567,210 @@ def get_seasonal_trend(
         if not product:
 
             raise HTTPException(
-
                 status_code=404,
-
                 detail=(
-                    f"Application product {product_id} "
-                    "was not found in the products table."
+                    f"Application product "
+                    f"{product_id} was not found."
                 )
-
             )
 
 
-        # ====================================================
-        # GET APPLICATION CATEGORY
-        # ====================================================
+        # ========================================================
+        # 2. GET APPLICATION CATEGORY
+        # ========================================================
 
-        category = str(
-            product.category or ""
-        ).strip()
+        application_category = (
+            str(product.category or "")
+            .strip()
+        )
 
 
-        if not category:
+        if not application_category:
 
             raise HTTPException(
-
-                status_code=404,
-
+                status_code=400,
                 detail=(
-                    f"Product {product.name} "
+                    f"Product '{product.name}' "
                     "does not have a category."
                 )
-
             )
 
 
-        # ====================================================
-        # CATEGORY HISTORICAL MONTHLY DEMAND
-        # ====================================================
-        #
-        # PricingDemand contains the historical market
-        # signals used by the forecasting system.
-        #
-        # We intentionally aggregate by category because the
-        # application product IDs do not correspond to the
-        # historical dataset product IDs.
-        #
-        # ====================================================
+        # ========================================================
+        # 3. MAP APPLICATION CATEGORY
+        # ========================================================
 
-        monthly_data = (
+        historical_category = (
+            resolve_historical_category(
+                application_category
+            )
+        )
+
+
+        if not historical_category:
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Unable to map the product category "
+                    "to the historical seasonal dataset."
+                )
+            )
+
+
+        # ========================================================
+        # 4. VERIFY CATEGORY EXISTS
+        # ========================================================
+
+        category_exists = (
+
+            db.query(
+                SeasonalSales.category
+            )
+
+            .filter(
+                func.lower(
+                    SeasonalSales.category
+                )
+                ==
+                historical_category.lower()
+            )
+
+            .first()
+
+        )
+
+
+        if not category_exists:
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No seasonal history is available "
+                    f"for category '{historical_category}'."
+                )
+            )
+
+
+        # ========================================================
+        # 5. DETERMINE HISTORICAL YEARS
+        # ========================================================
+
+        historical_year_rows = (
 
             db.query(
 
-                func.extract(
-                    "month",
-                    PricingDemand.date
-                ).label(
-                    "month_number"
-                ),
+                extract(
+                    "year",
+                    SeasonalSales.order_date
+                ).label("year")
 
-                func.avg(
-                    PricingDemand.demand_index
-                ).label(
-                    "average_demand"
+            )
+
+            .filter(
+
+                func.lower(
+                    SeasonalSales.category
                 )
+                ==
+                historical_category.lower()
+
+            )
+
+            .filter(
+                SeasonalSales.order_date.isnot(None)
+            )
+
+            .all()
+
+        )
+
+
+        historical_years = sorted({
+
+            int(row.year)
+
+            for row in historical_year_rows
+
+            if row.year is not None
+
+        })
+
+
+        # ========================================================
+        # 6. MONTHLY SALES
+        #
+        # We calculate:
+        #
+        #     total quantity per month per year
+        #
+        # and then average the yearly monthly values.
+        #
+        # This prevents a partial year from dominating the graph.
+        # ========================================================
+
+        monthly_yearly_rows = (
+
+            db.query(
+
+                extract(
+                    "year",
+                    SeasonalSales.order_date
+                ).label("year"),
+
+                extract(
+                    "month",
+                    SeasonalSales.order_date
+                ).label("month_number"),
+
+                func.sum(
+                    SeasonalSales.quantity
+                ).label("total_quantity")
 
             )
 
             .filter(
 
-                PricingDemand.category ==
-                category
+                func.lower(
+                    SeasonalSales.category
+                )
+                ==
+                historical_category.lower()
 
             )
 
             .filter(
-
-                PricingDemand.date.isnot(None)
-
+                SeasonalSales.order_date.isnot(None)
             )
 
             .filter(
-
-                PricingDemand.demand_index.isnot(None)
-
+                SeasonalSales.quantity.isnot(None)
             )
 
             .group_by(
 
-                func.extract(
+                extract(
+                    "year",
+                    SeasonalSales.order_date
+                ),
+
+                extract(
                     "month",
-                    PricingDemand.date
+                    SeasonalSales.order_date
                 )
 
             )
 
             .order_by(
 
-                func.extract(
+                extract(
+                    "year",
+                    SeasonalSales.order_date
+                ),
+
+                extract(
                     "month",
-                    PricingDemand.date
+                    SeasonalSales.order_date
                 )
 
             )
@@ -956,152 +780,98 @@ def get_seasonal_trend(
         )
 
 
-        # ====================================================
-        # FALLBACK: CASE-INSENSITIVE CATEGORY
-        # ====================================================
-
-        if not monthly_data:
-
-            monthly_data = (
-
-                db.query(
-
-                    func.extract(
-                        "month",
-                        PricingDemand.date
-                    ).label(
-                        "month_number"
-                    ),
-
-                    func.avg(
-                        PricingDemand.demand_index
-                    ).label(
-                        "average_demand"
-                    )
-
-                )
-
-                .filter(
-
-                    func.lower(
-                        PricingDemand.category
-                    ) ==
-                    category.lower()
-
-                )
-
-                .filter(
-
-                    PricingDemand.date.isnot(None)
-
-                )
-
-                .filter(
-
-                    PricingDemand.demand_index.isnot(None)
-
-                )
-
-                .group_by(
-
-                    func.extract(
-                        "month",
-                        PricingDemand.date
-                    )
-
-                )
-
-                .order_by(
-
-                    func.extract(
-                        "month",
-                        PricingDemand.date
-                    )
-
-                )
-
-                .all()
-
-            )
-
-
-        # ====================================================
-        # NO CATEGORY DATA
-        # ====================================================
-
-        if not monthly_data:
+        if not monthly_yearly_rows:
 
             raise HTTPException(
-
                 status_code=404,
-
                 detail=(
-
-                    f"No historical seasonal data "
-                    f"was found for the "
-                    f"'{category}' category."
-
+                    f"No seasonal records found "
+                    f"for category '{historical_category}'."
                 )
-
             )
 
 
-        # ====================================================
-        # STORE OBSERVED VALUES
-        # ====================================================
+        # ========================================================
+        # 7. BUILD YEAR -> MONTH DATA
+        # ========================================================
 
-        observed_values = {}
+        yearly_monthly_sales = {}
 
 
-        for row in monthly_data:
+        for row in monthly_yearly_rows:
+
+            year = int(row.year)
 
             month_number = int(
                 row.month_number
             )
 
-            demand_value = safe_float(
-                row.average_demand
+            quantity = float(
+                row.total_quantity or 0
             )
 
+            if year not in yearly_monthly_sales:
 
-            observed_values[
+                yearly_monthly_sales[year] = {}
+
+            yearly_monthly_sales[year][
                 month_number
-            ] = max(
-                0,
-                demand_value
-            )
+            ] = quantity
 
 
-        # ====================================================
-        # COMPLETE 12-MONTH PROFILE
-        # ====================================================
+        # ========================================================
+        # 8. AVERAGE EACH MONTH ACROSS AVAILABLE YEARS
+        # ========================================================
 
-        complete_values, estimated_months = (
-            interpolate_monthly_values(
-                observed_values
-            )
-        )
+        monthly_averages = {}
 
 
-        # ====================================================
-        # BUILD RESPONSE DATA
-        # ====================================================
+        for month_number in range(1, 13):
+
+            values = []
+
+            for year in historical_years:
+
+                year_data = (
+                    yearly_monthly_sales
+                    .get(year, {})
+                )
+
+                if month_number in year_data:
+
+                    values.append(
+                        year_data[month_number]
+                    )
+
+
+            if values:
+
+                monthly_averages[
+                    month_number
+                ] = sum(values) / len(values)
+
+            else:
+
+                monthly_averages[
+                    month_number
+                ] = 0
+
+
+        # ========================================================
+        # 9. CREATE COMPLETE 12-MONTH PROFILE
+        # ========================================================
 
         seasonal_data = []
 
 
-        for month_number in range(
-            1,
-            13
-        ):
+        for month_number in range(1, 13):
 
-            demand_value = safe_float(
-                complete_values.get(
+            demand = float(
+                monthly_averages.get(
                     month_number,
                     0
                 )
             )
-
 
             seasonal_data.append({
 
@@ -1115,20 +885,16 @@ def get_seasonal_trend(
 
                 "demand":
                     round(
-                        demand_value,
+                        demand,
                         2
-                    ),
-
-                "is_estimated":
-                    month_number
-                    in estimated_months
+                    )
 
             })
 
 
-        # ====================================================
-        # PEAK / LOWEST
-        # ====================================================
+        # ========================================================
+        # 10. ACTUAL MONTHS WITH DATA
+        # ========================================================
 
         positive_months = [
 
@@ -1144,50 +910,46 @@ def get_seasonal_trend(
         if not positive_months:
 
             raise HTTPException(
-
                 status_code=404,
-
                 detail=(
-                    f"The '{category}' category "
-                    "does not contain positive historical "
-                    "demand values."
+                    f"Category '{historical_category}' "
+                    "does not contain positive seasonal demand."
                 )
-
             )
 
 
+        # ========================================================
+        # 11. PEAK MONTH
+        # ========================================================
+
         peak_point = max(
-
             positive_months,
-
-            key=lambda item:
-                item["demand"]
-
+            key=lambda item: item["demand"]
         )
 
+
+        # ========================================================
+        # 12. LOWEST MONTH
+        # ========================================================
 
         lowest_point = min(
-
             positive_months,
-
-            key=lambda item:
-                item["demand"]
-
+            key=lambda item: item["demand"]
         )
 
 
-        peak_demand = safe_float(
+        peak_demand = float(
             peak_point["demand"]
         )
 
-        lowest_demand = safe_float(
+        lowest_demand = float(
             lowest_point["demand"]
         )
 
 
-        # ====================================================
-        # SEASONALITY CHANGE
-        # ====================================================
+        # ========================================================
+        # 13. SEASONALITY CHANGE
+        # ========================================================
 
         if lowest_demand > 0:
 
@@ -1208,26 +970,20 @@ def get_seasonal_trend(
 
 
         seasonality_change_pct = round(
-
-            max(
-                0,
-                seasonality_change_pct
-            ),
-
+            seasonality_change_pct,
             2
-
         )
 
 
-        # ====================================================
-        # SEASONALITY STRENGTH
-        # ====================================================
+        # ========================================================
+        # 14. SEASONALITY STRENGTH
+        # ========================================================
 
-        if seasonality_change_pct >= 40:
+        if seasonality_change_pct >= 50:
 
             seasonality_strength = "Strong"
 
-        elif seasonality_change_pct >= 20:
+        elif seasonality_change_pct >= 25:
 
             seasonality_strength = "Moderate"
 
@@ -1240,52 +996,37 @@ def get_seasonal_trend(
             seasonality_strength = "Stable"
 
 
-        # ====================================================
-        # SOURCE DESCRIPTION
-        # ====================================================
+        # ========================================================
+        # 15. HISTORICAL COVERAGE
+        # ========================================================
 
         historical_months_available = len(
-            observed_values
+            positive_months
         )
 
-        estimated_month_count = len(
-            estimated_months
+        estimated_months = (
+            12 -
+            historical_months_available
         )
 
 
-        if estimated_month_count == 0:
-
-            data_source = (
-                "Historical monthly demand "
-                "for the selected product category"
-            )
-
-        else:
-
-            data_source = (
-
-                "Historical monthly demand for the "
-                "selected product category, with "
-                f"{estimated_month_count} month(s) "
-                "estimated by seasonal interpolation"
-
-            )
-
-
-        # ====================================================
-        # RESPONSE
-        # ====================================================
+        # ========================================================
+        # 16. RESPONSE
+        # ========================================================
 
         return {
 
             "product_id":
-                product_id,
+                str(product.id),
 
             "product_name":
                 product.name,
 
+            "application_category":
+                application_category,
+
             "category":
-                category,
+                historical_category,
 
             "seasonal_data":
                 seasonal_data,
@@ -1318,28 +1059,26 @@ def get_seasonal_trend(
                 historical_months_available,
 
             "estimated_months":
-                estimated_month_count,
+                estimated_months,
+
+            "historical_years":
+                historical_years,
 
             "data_source":
-                data_source
+                "ecommerce_sales_34500.csv"
 
         }
 
 
     except HTTPException:
-
         raise
-
 
     except Exception as e:
 
         raise HTTPException(
-
             status_code=500,
-
             detail=(
                 "Seasonal trend analysis failed: "
                 f"{str(e)}"
             )
-
         )

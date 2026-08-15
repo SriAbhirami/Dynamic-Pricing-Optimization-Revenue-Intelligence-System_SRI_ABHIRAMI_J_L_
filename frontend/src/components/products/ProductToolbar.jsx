@@ -66,6 +66,7 @@ function ProductToolbar({
 
       </div>
 
+
       {/* =====================================================
           CATEGORY
       ====================================================== */}
@@ -113,37 +114,38 @@ function ProductToolbar({
             All Categories
           </option>
 
-          <option value="Electronics">
-            Electronics
-          </option>
-
-          <option value="Apparel">
-            Apparel
-          </option>
-
-          <option value="Shoes">
-            Shoes
-          </option>
-
-          <option value="Accessories">
-            Accessories
-          </option>
-
           <option value="Beauty">
             Beauty
           </option>
 
-          <option value="Groceries">
-            Groceries
+          <option value="Electronics">
+            Electronics
+          </option>
+
+          <option value="Fashion">
+            Fashion
+          </option>
+
+          <option value="Grocery">
+            Grocery
           </option>
 
           <option value="Home">
             Home
           </option>
 
+          <option value="Sports">
+            Sports
+          </option>
+
+          <option value="Toys">
+            Toys
+          </option>
+
         </select>
 
       </div>
+
 
       {/* =====================================================
           SORT
@@ -207,6 +209,7 @@ function ProductToolbar({
         </select>
 
       </div>
+
 
       {/* =====================================================
           ORDER
@@ -284,6 +287,7 @@ function ProductToolbar({
         </button>
 
       </div>
+
 
       {/* =====================================================
           ADD PRODUCT

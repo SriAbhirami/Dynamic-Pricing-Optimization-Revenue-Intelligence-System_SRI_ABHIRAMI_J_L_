@@ -9,6 +9,7 @@ from app.models.users import User
 from app.models.sales import Sale
 from app.models.pricing_demand import PricingDemand
 from app.models.historical_sales import HistoricalSales
+from app.models.seasonal_sales import SeasonalSales
 
 # Import routers
 from app.api.products import router as product_router

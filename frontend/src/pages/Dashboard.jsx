@@ -1,4 +1,5 @@
 /*Previously Dashboards page now updated as Product management page*/
+
 import { useState } from "react";
 
 import Sidebar from "../components/layout/Sidebar";
@@ -7,8 +8,8 @@ import RecentProducts from "../components/tables/RecentProducts";
 
 import {
   Package,
-  Plus,
 } from "lucide-react";
+
 
 function Dashboard() {
   const [refreshKey] = useState(0);
@@ -22,6 +23,7 @@ function Dashboard() {
 
       <Sidebar />
 
+
       {/* =====================================================
           MAIN CONTENT
       ====================================================== */}
@@ -30,13 +32,15 @@ function Dashboard() {
 
         <Navbar />
 
+
         <main className="px-6 py-7 lg:px-8">
+
 
           {/* =====================================================
               PAGE TITLE
           ====================================================== */}
 
-          <div className="mb-7 flex flex-col justify-between gap-5 md:flex-row md:items-center">
+          <div className="mb-7 flex items-center">
 
             <div className="flex items-center gap-4">
 
@@ -56,20 +60,55 @@ function Dashboard() {
                   shadow-[0_0_12px_rgba(163,230,53,0.45),0_0_28px_rgba(163,230,53,0.18)]
                 "
               >
-                <Package className="h-6 w-6 text-lime-300 drop-shadow-[0_0_8px_rgba(163,230,53,0.8)]" />
+
+                <Package
+                  className="
+                    h-6
+                    w-6
+                    text-lime-300
+                    drop-shadow-[0_0_8px_rgba(163,230,53,0.8)]
+                  "
+                />
+
               </div>
+
 
               <div>
 
-                <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-lime-300">
+                <p
+                  className="
+                    mb-1
+                    text-[11px]
+                    font-bold
+                    uppercase
+                    tracking-[0.18em]
+                    text-lime-300
+                  "
+                >
                   PricePilot AI
                 </p>
 
-                <h1 className="text-3xl font-bold tracking-tight text-white">
+
+                <h1
+                  className="
+                    text-3xl
+                    font-bold
+                    tracking-tight
+                    text-white
+                  "
+                >
                   Product Management
                 </h1>
 
-                <p className="mt-1 text-sm font-medium text-white/70">
+
+                <p
+                  className="
+                    mt-1
+                    text-sm
+                    font-medium
+                    text-white/70
+                  "
+                >
                   Manage products, prices and inventory
                 </p>
 
@@ -77,44 +116,8 @@ function Dashboard() {
 
             </div>
 
-            {/* =================================================
-                ADD PRODUCT BUTTON
-            ================================================== */}
-
-            <button
-              type="button"
-              onClick={() => {
-                const event = new CustomEvent("open-add-product");
-                window.dispatchEvent(event);
-              }}
-              className="
-                flex
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                border
-                border-lime-200
-                bg-lime-300
-                px-5
-                py-3
-                text-sm
-                font-bold
-                text-black
-                shadow-[0_0_14px_rgba(163,230,53,0.65),0_0_32px_rgba(163,230,53,0.25)]
-                transition-all
-                duration-200
-                hover:bg-lime-200
-                hover:shadow-[0_0_20px_rgba(163,230,53,0.85),0_0_45px_rgba(163,230,53,0.35)]
-                active:scale-[0.98]
-              "
-            >
-              <Plus className="h-5 w-5" />
-
-              Add Product
-            </button>
-
           </div>
+
 
           {/* =====================================================
               PRODUCT TABLE CONTAINER
@@ -135,9 +138,10 @@ function Dashboard() {
             "
           >
 
-            {/* =================================================
+
+            {/* =====================================================
                 TABLE HEADER
-            ================================================== */}
+            ====================================================== */}
 
             <div
               className="
@@ -159,11 +163,22 @@ function Dashboard() {
                   Products
                 </h2>
 
-                <p className="mt-1 text-sm font-medium text-white/60">
+
+                <p
+                  className="
+                    mt-1
+                    text-sm
+                    font-medium
+                    text-white/60
+                  "
+                >
                   Product catalogue
                 </p>
 
               </div>
+
+
+              {/* Live Status */}
 
               <div className="flex items-center gap-2">
 
@@ -177,7 +192,15 @@ function Dashboard() {
                   "
                 />
 
-                <span className="text-xs font-bold uppercase tracking-wider text-lime-200">
+                <span
+                  className="
+                    text-xs
+                    font-bold
+                    uppercase
+                    tracking-wider
+                    text-lime-200
+                  "
+                >
                   Live
                 </span>
 
@@ -185,9 +208,10 @@ function Dashboard() {
 
             </div>
 
-            {/* =================================================
+
+            {/* =====================================================
                 PRODUCTS
-            ================================================== */}
+            ====================================================== */}
 
             <div className="w-full">
 
@@ -195,13 +219,25 @@ function Dashboard() {
 
             </div>
 
+
           </section>
+
 
           {/* =====================================================
               STATUS
           ====================================================== */}
 
-          <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-white/60">
+          <div
+            className="
+              mt-5
+              flex
+              items-center
+              gap-2
+              text-xs
+              font-semibold
+              text-white/60
+            "
+          >
 
             <span
               className="
@@ -219,6 +255,7 @@ function Dashboard() {
 
           </div>
 
+
         </main>
 
       </div>
@@ -226,5 +263,6 @@ function Dashboard() {
     </div>
   );
 }
+
 
 export default Dashboard;
