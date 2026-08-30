@@ -1,3 +1,6 @@
-2026/08/19-22:32:52.323 5530 Reusing MANIFEST C:\Users\sreea\OneDrive\Desktop\Dynamic-Pricing-Optimization-Revenue-Intelligence-System_SRI_ABHIRAMI_J_L_\backend\flipkart_session\Default\IndexedDB\https_www.flipkart.com_0.indexeddb.leveldb/MANIFEST-000001
-2026/08/19-22:32:52.324 5530 Recovering log #3
-2026/08/19-22:32:52.327 5530 Reusing old log C:\Users\sreea\OneDrive\Desktop\Dynamic-Pricing-Optimization-Revenue-Intelligence-System_SRI_ABHIRAMI_J_L_\backend\flipkart_session\Default\IndexedDB\https_www.flipkart.com_0.indexeddb.leveldb/000003.log 
+2026/08/29-15:07:47.861 11dc Reusing MANIFEST C:\Users\sreea\OneDrive\Desktop\Dynamic-Pricing-Optimization-Revenue-Intelligence-System_SRI_ABHIRAMI_J_L_\backend\flipkart_session\Default\IndexedDB\https_www.flipkart.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/08/29-15:07:47.862 11dc Recovering log #56
+2026/08/29-15:07:47.873 11dc Reusing old log C:\Users\sreea\OneDrive\Desktop\Dynamic-Pricing-Optimization-Revenue-Intelligence-System_SRI_ABHIRAMI_J_L_\backend\flipkart_session\Default\IndexedDB\https_www.flipkart.com_0.indexeddb.leveldb/000056.log 
+2026/08/29-15:07:48.164 11dc Level-0 table #63: started
+2026/08/29-15:07:48.187 11dc Level-0 table #63: 2268475 bytes OK
+2026/08/29-15:07:48.189 11dc Delete type=0 #56

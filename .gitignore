@@ -221,3 +221,6 @@ __marimo__/
 datasets/raw/sales.csv
 datasets/forecasts/
 datasets/processed/demand_forecasting_features.csv
+
+.env
+**/.env

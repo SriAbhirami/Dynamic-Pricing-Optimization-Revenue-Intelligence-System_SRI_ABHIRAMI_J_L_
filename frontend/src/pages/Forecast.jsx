@@ -63,8 +63,9 @@ function Forecast() {
   // ACTIVE HORIZON
   // ============================================================
 
+  // Short Term is selected by default.
   const [activeHorizon, setActiveHorizon] =
-    useState("thirty_days");
+    useState("short");
 
 
   // ============================================================
@@ -125,9 +126,7 @@ function Forecast() {
     const number = Number(value);
 
     if (Number.isNaN(number)) {
-
       return "0";
-
     }
 
     return number.toLocaleString(
@@ -325,9 +324,7 @@ function Forecast() {
     async product => {
 
       if (!product) {
-
         return;
-
       }
 
 
@@ -757,9 +754,7 @@ function Forecast() {
       () => {
 
         if (!forecast) {
-
           return [];
-
         }
 
 
@@ -871,9 +866,7 @@ function Forecast() {
       () => {
 
         if (!forecast) {
-
           return null;
-
         }
 
 
@@ -1600,19 +1593,30 @@ function Forecast() {
 
     return (
 
-      <div className="min-h-screen bg-slate-950 text-white">
+      <div className="min-h-screen bg-[#0B1220] text-white">
 
         <Sidebar />
 
-        <main className="lg:ml-64 p-6">
+        <main className="min-w-0 flex-1 p-6">
 
           <div className="flex min-h-[75vh] items-center justify-center">
 
             <div className="text-center">
 
-              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-lime-300" />
+              <div
+                className="
+                  mx-auto
+                  h-10
+                  w-10
+                  animate-spin
+                  rounded-full
+                  border-2
+                  border-white/10
+                  border-t-lime-300
+                "
+              />
 
-              <p className="mt-5 text-sm text-slate-400">
+              <p className="mt-5 text-sm text-white/60">
                 Loading PricePilot AI products...
               </p>
 
@@ -1635,78 +1639,86 @@ function Forecast() {
 
   return (
 
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen w-full bg-[#0B1220] text-white">
 
       <Sidebar />
 
 
-      <main className="lg:ml-64">
+      <main className="min-w-0 flex-1">
 
-        <div className="mx-auto max-w-[1500px] p-5 sm:p-7 lg:p-9">
+        <div className="mx-auto max-w-[1500px] px-6 py-7 lg:px-8">
 
 
           {/* ==================================================
-              HEADER
+              PAGE TITLE
           ================================================== */}
 
-          <header className="mb-8">
+          <header className="mb-7">
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
 
-              <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_16px_rgba(163,230,53,0.9)]" />
+              {/* NEON FORECAST ICON */}
 
-              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-lime-300">
-                PricePilot AI
-              </span>
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-xl
+                  border
+                  border-lime-300/60
+                  bg-lime-300/10
+                  shadow-[0_0_12px_rgba(163,230,53,0.45),0_0_28px_rgba(163,230,53,0.18)]
+                "
+              >
 
-            </div>
-
-
-            <div className="mt-3 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-
-              <div>
-
-                <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-                  Demand Forecast
-                </h1>
-
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                  Predict future demand, identify seasonal patterns,
-                  and understand how your managed products may behave
-                  across short, medium and long-term planning horizons.
-                </p>
+                <TrendingUp
+  className="
+    h-6
+    w-6
+    text-lime-300
+    drop-shadow-[0_0_8px_rgba(163,230,53,0.8)]
+  "
+/>
 
               </div>
 
 
-              {selectedProduct && (
+              <div>
 
-                <div className="flex items-center gap-3 rounded-2xl border border-lime-300/10 bg-lime-300/[0.04] px-4 py-3">
+                <h1
+                  className="
+                    text-3xl
+                    font-bold
+                    tracking-tight
+                    text-white
+                    sm:text-4xl
+                  "
+                >
+                  Demand Forecast
+                </h1>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime-300/10">
 
-                    <Package className="h-5 w-5 text-lime-300" />
+                <p
+                  className="
+                    mt-1
+                    text-sm
+                    font-medium
+                    text-white/70
+                  "
+                >
+                  Predict demand and understand future product behavior
+                </p>
 
-                  </div>
-
-                  <div>
-
-                    <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500">
-                      Selected Product
-                    </p>
-
-                    <p className="mt-1 max-w-[220px] truncate text-sm font-bold text-white">
-                      {selectedProduct.name}
-                    </p>
-
-                  </div>
-
-                </div>
-
-              )}
+              </div>
 
             </div>
 
+
+            
           </header>
 
 
@@ -1714,9 +1726,22 @@ function Forecast() {
               PRODUCT CONTROL
           ================================================== */}
 
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-2xl">
+          <section
+            className="
+              overflow-hidden
+              rounded-2xl
+              border
+              border-lime-300/40
+              bg-[#111C2E]
+              shadow-[0_0_10px_rgba(163,230,53,0.24),0_0_28px_rgba(163,230,53,0.11),0_0_60px_rgba(163,230,53,0.04)]
+              transition-all
+              duration-300
+              hover:border-lime-300/55
+              hover:shadow-[0_0_14px_rgba(163,230,53,0.32),0_0_36px_rgba(163,230,53,0.15),0_0_70px_rgba(163,230,53,0.06)]
+            "
+          >
 
-            <div className="h-1 bg-gradient-to-r from-transparent via-lime-300 to-transparent opacity-70" />
+            <div className="h-1 bg-gradient-to-r from-transparent via-lime-300 to-transparent opacity-75" />
 
 
             <div className="p-5 sm:p-7">
@@ -1729,7 +1754,7 @@ function Forecast() {
 
                     <Target className="h-4 w-4 text-lime-300" />
 
-                    <label className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                    <label className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">
                       Product from PricePilot Catalog
                     </label>
 
@@ -1739,7 +1764,23 @@ function Forecast() {
                   <select
                     value={selectedProductId}
                     onChange={handleProductChange}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-5 py-4 text-sm font-semibold text-white outline-none transition focus:border-lime-300/50 focus:ring-4 focus:ring-lime-300/5"
+                    className="
+                      w-full
+                      rounded-xl
+                      border
+                      border-white/10
+                      bg-[#0B1220]
+                      px-5
+                      py-4
+                      text-sm
+                      font-semibold
+                      text-white
+                      outline-none
+                      transition
+                      focus:border-lime-300/50
+                      focus:ring-4
+                      focus:ring-lime-300/5
+                    "
                   >
 
                     {products.length === 0 ? (
@@ -1777,7 +1818,23 @@ function Forecast() {
                     predicting ||
                     !selectedProduct
                   }
-                  className="flex min-h-[54px] items-center justify-center gap-2 rounded-2xl bg-lime-300 px-8 font-black text-black transition hover:bg-lime-200 hover:shadow-[0_0_35px_rgba(163,230,53,0.25)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="
+                    flex
+                    min-h-[54px]
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    bg-lime-300
+                    px-8
+                    font-black
+                    text-black
+                    transition
+                    hover:bg-lime-200
+                    hover:shadow-[0_0_25px_rgba(163,230,53,0.30)]
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                  "
                 >
 
                   {predicting ? (
@@ -1815,9 +1872,18 @@ function Forecast() {
 
                 <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
 
-                  <div className="rounded-2xl border border-white/5 bg-slate-950/70 p-4">
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-lime-300/10
+                      bg-[#0B1220]
+                      p-4
+                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
+                    "
+                  >
 
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-600">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/40">
                       Product
                     </p>
 
@@ -1828,9 +1894,18 @@ function Forecast() {
                   </div>
 
 
-                  <div className="rounded-2xl border border-white/5 bg-slate-950/70 p-4">
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-lime-300/10
+                      bg-[#0B1220]
+                      p-4
+                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
+                    "
+                  >
 
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-600">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/40">
                       Category
                     </p>
 
@@ -1841,9 +1916,18 @@ function Forecast() {
                   </div>
 
 
-                  <div className="rounded-2xl border border-white/5 bg-slate-950/70 p-4">
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-lime-300/10
+                      bg-[#0B1220]
+                      p-4
+                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
+                    "
+                  >
 
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-600">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/40">
                       Current Price
                     </p>
 
@@ -1856,9 +1940,18 @@ function Forecast() {
                   </div>
 
 
-                  <div className="rounded-2xl border border-white/5 bg-slate-950/70 p-4">
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-lime-300/10
+                      bg-[#0B1220]
+                      p-4
+                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
+                    "
+                  >
 
-                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-600">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/40">
                       Available Stock
                     </p>
 
@@ -1885,7 +1978,19 @@ function Forecast() {
 
           {error && (
 
-            <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
+            <div
+              className="
+                mt-5
+                rounded-xl
+                border
+                border-red-500/25
+                bg-red-500/5
+                p-4
+                text-sm
+                text-red-300
+                shadow-[0_0_18px_rgba(239,68,68,0.05)]
+              "
+            >
 
               {error}
 
@@ -1910,7 +2015,18 @@ function Forecast() {
 
                 {/* CURRENT DEMAND */}
 
-                <div className="relative overflow-hidden rounded-3xl border border-lime-300/15 bg-gradient-to-br from-lime-300/[0.10] via-slate-900/80 to-slate-900/70 p-6">
+                <div
+                  className="
+                    relative
+                    overflow-hidden
+                    rounded-2xl
+                    border
+                    border-lime-300/40
+                    bg-[#111C2E]
+                    p-6
+                    shadow-[0_0_10px_rgba(163,230,53,0.22),0_0_28px_rgba(163,230,53,0.10),0_0_55px_rgba(163,230,53,0.04)]
+                  "
+                >
 
                   <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-lime-300/10 blur-3xl" />
 
@@ -1921,18 +2037,31 @@ function Forecast() {
 
                       <div>
 
-                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
                           Current Predicted Demand
                         </p>
 
-                        <p className="mt-1 text-xs text-slate-600">
+                        <p className="mt-1 text-xs text-white/35">
                           Model demand index
                         </p>
 
                       </div>
 
 
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-lime-300/10">
+                      <div
+                        className="
+                          flex
+                          h-11
+                          w-11
+                          items-center
+                          justify-center
+                          rounded-xl
+                          border
+                          border-lime-300/20
+                          bg-lime-300/10
+                          shadow-[0_0_12px_rgba(163,230,53,0.12)]
+                        "
+                      >
 
                         <Gauge className="h-5 w-5 text-lime-300" />
 
@@ -1959,10 +2088,15 @@ function Forecast() {
                     </div>
 
 
-                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#0B1220]">
 
                       <div
-                        className="h-full rounded-full bg-lime-300 shadow-[0_0_14px_rgba(163,230,53,0.5)]"
+                        className="
+                          h-full
+                          rounded-full
+                          bg-lime-300
+                          shadow-[0_0_14px_rgba(163,230,53,0.5)]
+                        "
                         style={{
                           width: `${Math.min(
                             100,
@@ -1985,11 +2119,20 @@ function Forecast() {
 
                 {/* TREND */}
 
-                <div className={`rounded-3xl border border-white/10 bg-slate-900/70 p-6 ${trendInfo.bgClass}`}>
+                <div
+                  className="
+                    rounded-2xl
+                    border
+                    border-lime-300/20
+                    bg-[#111C2E]
+                    p-6
+                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_25px_rgba(163,230,53,0.05)]
+                  "
+                >
 
                   <div className="flex items-center justify-between">
 
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
                       30-Day Movement
                     </p>
 
@@ -2011,12 +2154,14 @@ function Forecast() {
                   </p>
 
 
-                  <p className={`mt-2 text-sm font-bold ${trendInfo.className}`}>
+                  <p
+                    className={`mt-2 text-sm font-bold ${trendInfo.className}`}
+                  >
                     {trendInfo.label} demand
                   </p>
 
 
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                  <p className="mt-2 text-xs leading-5 text-white/40">
                     Expected movement over the 30-day forecast horizon.
                   </p>
 
@@ -2025,11 +2170,20 @@ function Forecast() {
 
                 {/* INVENTORY */}
 
-                <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <div
+                  className="
+                    rounded-2xl
+                    border
+                    border-lime-300/20
+                    bg-[#111C2E]
+                    p-6
+                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_25px_rgba(163,230,53,0.05)]
+                  "
+                >
 
                   <div className="flex items-center justify-between">
 
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">
                       Inventory Intelligence
                     </p>
 
@@ -2048,14 +2202,14 @@ function Forecast() {
                   </p>
 
 
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                  <p className="mt-2 text-xs leading-5 text-white/40">
                     {inventoryStatus.description}
                   </p>
 
 
                   <div className="mt-5 flex items-center justify-between text-xs">
 
-                    <span className="text-slate-600">
+                    <span className="text-white/35">
                       Current stock
                     </span>
 
@@ -2092,7 +2246,7 @@ function Forecast() {
 
                     </div>
 
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-white/40">
                       Switch between planning horizons to inspect the business outlook.
                     </p>
 
@@ -2101,24 +2255,40 @@ function Forecast() {
                 </div>
 
 
-                <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-2">
+                <div
+                  className="
+                    grid
+                    grid-cols-3
+                    gap-2
+                    rounded-xl
+                    border
+                    border-lime-300/20
+                    bg-[#111C2E]
+                    p-2
+                    shadow-[0_0_10px_rgba(163,230,53,0.08),0_0_22px_rgba(163,230,53,0.04)]
+                  "
+                >
 
                   {[
+
                     {
                       key: "short",
                       label: "Short Term",
                       sub: "30 Days",
                     },
+
                     {
                       key: "medium",
                       label: "Medium Term",
                       sub: "6 Months",
                     },
+
                     {
                       key: "long",
                       label: "Long Term",
                       sub: "12 Months",
                     },
+
                   ].map(
                     option => (
 
@@ -2133,8 +2303,8 @@ function Forecast() {
                         className={`rounded-xl px-4 py-3 text-left transition ${
                           activeHorizon ===
                           option.key
-                            ? "bg-lime-300 text-black shadow-[0_0_25px_rgba(163,230,53,0.12)]"
-                            : "text-slate-400 hover:bg-white/[0.03] hover:text-white"
+                            ? "bg-lime-300 text-black shadow-[0_0_25px_rgba(163,230,53,0.16)]"
+                            : "text-white/50 hover:bg-white/[0.03] hover:text-white"
                         }`}
                       >
 
@@ -2147,7 +2317,7 @@ function Forecast() {
                             activeHorizon ===
                             option.key
                               ? "text-black/60"
-                              : "text-slate-600"
+                              : "text-white/35"
                           }`}
                         >
                           {option.sub}
@@ -2169,13 +2339,23 @@ function Forecast() {
 
               {activeData && (
 
-                <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70">
+                <section
+                  className="
+                    mt-5
+                    overflow-hidden
+                    rounded-2xl
+                    border
+                    border-lime-300/25
+                    bg-[#111C2E]
+                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_28px_rgba(163,230,53,0.05)]
+                  "
+                >
 
-                  <div className="grid lg:grid-cols-[1fr_1fr_1fr_1fr]">
+                  <div className="grid lg:grid-cols-4">
 
                     <div className="border-b border-white/5 p-5 lg:border-b-0 lg:border-r">
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/40">
                         Average Daily Demand
                       </p>
 
@@ -2190,7 +2370,7 @@ function Forecast() {
 
                     <div className="border-b border-white/5 p-5 lg:border-b-0 lg:border-r">
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/40">
                         Total Predicted Demand
                       </p>
 
@@ -2205,7 +2385,7 @@ function Forecast() {
 
                     <div className="border-b border-white/5 p-5 lg:border-b-0 lg:border-r">
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/40">
                         Forecast Revenue
                       </p>
 
@@ -2220,7 +2400,7 @@ function Forecast() {
 
                     <div className="p-5">
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/40">
                         Confidence
                       </p>
 
@@ -2342,10 +2522,10 @@ function Forecast() {
                             }
 
                           }}
-                          className={`text-left rounded-3xl border p-5 transition ${
+                          className={`rounded-2xl border p-5 text-left transition ${
                             isActive
-                              ? "border-lime-300/30 bg-lime-300/[0.05] shadow-[0_0_30px_rgba(163,230,53,0.05)]"
-                              : "border-white/10 bg-slate-900/70 hover:border-white/20"
+                              ? "border-lime-300/45 bg-[#111C2E] shadow-[0_0_12px_rgba(163,230,53,0.18),0_0_30px_rgba(163,230,53,0.06)]"
+                              : "border-lime-300/15 bg-[#111C2E] shadow-[0_0_8px_rgba(163,230,53,0.05)] hover:border-lime-300/30 hover:shadow-[0_0_14px_rgba(163,230,53,0.10)]"
                           }`}
                         >
 
@@ -2357,16 +2537,16 @@ function Forecast() {
                                 {item.title}
                               </p>
 
-                              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.17em] text-slate-600">
+                              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.17em] text-white/35">
                                 {item.subtitle}
                               </p>
 
                             </div>
 
 
-                            <span className="rounded-xl bg-white/[0.03] p-2">
+                            <span className="rounded-xl border border-white/5 bg-[#0B1220] p-2">
 
-                              <CalendarDays className="h-4 w-4 text-slate-500" />
+                              <CalendarDays className="h-4 w-4 text-white/35" />
 
                             </span>
 
@@ -2377,7 +2557,7 @@ function Forecast() {
 
                             <div>
 
-                              <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                              <p className="text-[9px] uppercase tracking-wider text-white/35">
                                 Avg Daily
                               </p>
 
@@ -2392,7 +2572,7 @@ function Forecast() {
 
                             <div>
 
-                              <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                              <p className="text-[9px] uppercase tracking-wider text-white/35">
                                 Total Demand
                               </p>
 
@@ -2407,11 +2587,11 @@ function Forecast() {
 
                             <div>
 
-                              <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                              <p className="text-[9px] uppercase tracking-wider text-white/35">
                                 Revenue
                               </p>
 
-                              <p className="mt-1 text-sm font-bold text-slate-300">
+                              <p className="mt-1 text-sm font-bold text-white/70">
                                 {formatCurrency(
                                   data.total_predicted_revenue
                                 )}
@@ -2422,11 +2602,11 @@ function Forecast() {
 
                             <div>
 
-                              <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                              <p className="text-[9px] uppercase tracking-wider text-white/35">
                                 Confidence
                               </p>
 
-                              <p className="mt-1 text-sm font-bold text-slate-300">
+                              <p className="mt-1 text-sm font-bold text-white/70">
                                 {formatNumber(
                                   data.confidence_score
                                 )}%
@@ -2446,11 +2626,11 @@ function Forecast() {
                             </span>
 
 
-                            <span className="text-xs text-slate-600">
+                            <span className="text-xs text-white/35">
 
                               Change{" "}
 
-                              <span className="font-bold text-slate-400">
+                              <span className="font-bold text-white/60">
                                 {formatPercent(
                                   data.trend_change_percent
                                 )}
@@ -2476,7 +2656,17 @@ function Forecast() {
                   DEMAND TREND
               ================================================== */}
 
-              <section className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70">
+              <section
+                className="
+                  mt-8
+                  overflow-hidden
+                  rounded-2xl
+                  border
+                  border-lime-300/25
+                  bg-[#111C2E]
+                  shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_28px_rgba(163,230,53,0.05)]
+                "
+              >
 
                 <div className="border-b border-white/5 p-6 sm:p-7">
 
@@ -2494,14 +2684,26 @@ function Forecast() {
 
                       </div>
 
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                      <p className="mt-1 text-xs leading-5 text-white/40">
                         How average daily demand evolves as the forecast horizon expands.
                       </p>
 
                     </div>
 
 
-                    <div className={`flex items-center gap-2 rounded-2xl px-4 py-3 ${trendInfo.bgClass}`}>
+                    <div
+                      className={`
+                        flex
+                        items-center
+                        gap-2
+                        rounded-xl
+                        border
+                        border-white/5
+                        px-4
+                        py-3
+                        ${trendInfo.bgClass}
+                      `}
+                    >
 
                       <TrendIcon
                         className={`h-5 w-5 ${trendInfo.className}`}
@@ -2509,11 +2711,13 @@ function Forecast() {
 
                       <div>
 
-                        <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                        <p className="text-[9px] uppercase tracking-wider text-white/35">
                           Current Direction
                         </p>
 
-                        <p className={`text-sm font-black ${trendInfo.className}`}>
+                        <p
+                          className={`text-sm font-black ${trendInfo.className}`}
+                        >
                           {trendInfo.label}
                         </p>
 
@@ -2716,7 +2920,17 @@ function Forecast() {
               SEASONAL ANALYSIS
           ================================================== */}
 
-          <section className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70">
+          <section
+            className="
+              mt-8
+              overflow-hidden
+              rounded-2xl
+              border
+              border-lime-300/25
+              bg-[#111C2E]
+              shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_28px_rgba(163,230,53,0.05)]
+            "
+          >
 
             <div className="border-b border-white/5 p-6 sm:p-7">
 
@@ -2735,7 +2949,7 @@ function Forecast() {
                   </div>
 
 
-                  <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">
+                  <p className="mt-2 max-w-3xl text-xs leading-5 text-white/40">
 
                     Historical seasonal behavior is calculated from the
                     selected application's product category. The application
@@ -2749,13 +2963,26 @@ function Forecast() {
 
                 {seasonalData && (
 
-                  <div className="flex items-center gap-2 rounded-2xl border border-lime-300/10 bg-lime-300/[0.04] px-4 py-3">
+                  <div
+                    className="
+                      flex
+                      items-center
+                      gap-2
+                      rounded-xl
+                      border
+                      border-lime-300/20
+                      bg-lime-300/5
+                      px-4
+                      py-3
+                      shadow-[0_0_12px_rgba(163,230,53,0.06)]
+                    "
+                  >
 
                     <Sparkles className="h-4 w-4 text-lime-300" />
 
                     <div>
 
-                      <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                      <p className="text-[9px] uppercase tracking-wider text-white/35">
                         Seasonality
                       </p>
 
@@ -2784,13 +3011,24 @@ function Forecast() {
 
                 <div className="text-center">
 
-                  <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-white/10 border-t-lime-300" />
+                  <div
+                    className="
+                      mx-auto
+                      h-9
+                      w-9
+                      animate-spin
+                      rounded-full
+                      border-2
+                      border-white/10
+                      border-t-lime-300
+                    "
+                  />
 
-                  <p className="mt-4 text-sm font-semibold text-slate-400">
+                  <p className="mt-4 text-sm font-semibold text-white/60">
                     Building seasonal demand profile...
                   </p>
 
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-1 text-xs text-white/35">
                     Comparing historical category behavior.
                   </p>
 
@@ -2814,13 +3052,22 @@ function Forecast() {
                       PRODUCT CONTEXT
                   ================================================== */}
 
-                  <div className="rounded-2xl border border-lime-300/10 bg-lime-300/[0.03] p-4">
+                  <div
+                    className="
+                      rounded-xl
+                      border
+                      border-lime-300/15
+                      bg-[#0B1220]
+                      p-4
+                      shadow-[0_0_10px_rgba(163,230,53,0.04)]
+                    "
+                  >
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
                       <div>
 
-                        <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-600">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/35">
                           Seasonal Context
                         </p>
 
@@ -2828,7 +3075,7 @@ function Forecast() {
 
                           {seasonalData.product_name}
 
-                          <span className="mx-2 text-slate-700">
+                          <span className="mx-2 text-white/20">
                             /
                           </span>
 
@@ -2843,11 +3090,11 @@ function Forecast() {
 
                       <div className="text-left sm:text-right">
 
-                        <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                        <p className="text-[9px] uppercase tracking-wider text-white/35">
                           Historical Coverage
                         </p>
 
-                        <p className="mt-1 text-sm font-bold text-slate-300">
+                        <p className="mt-1 text-sm font-bold text-white/65">
 
                           {seasonalData.historical_months_available}
                           {" "}
@@ -2857,7 +3104,7 @@ function Forecast() {
                             seasonalData.estimated_months
                           ) > 0 && (
 
-                            <span className="text-slate-600">
+                            <span className="text-white/35">
 
                               {" "}
                               +
@@ -2885,9 +3132,18 @@ function Forecast() {
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-5">
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-lime-300/15
+                        bg-[#0B1220]
+                        p-5
+                        shadow-[0_0_10px_rgba(163,230,53,0.04)]
+                      "
+                    >
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">
                         Peak Month
                       </p>
 
@@ -2895,8 +3151,9 @@ function Forecast() {
                         {seasonalData.peak_month}
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-500">
-                        Demand {formatNumber(
+                      <p className="mt-1 text-xs text-white/40">
+                        Demand{" "}
+                        {formatNumber(
                           seasonalData.peak_demand
                         )}
                       </p>
@@ -2904,9 +3161,18 @@ function Forecast() {
                     </div>
 
 
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-5">
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-lime-300/10
+                        bg-[#0B1220]
+                        p-5
+                        shadow-[0_0_10px_rgba(163,230,53,0.03)]
+                      "
+                    >
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">
                         Lowest Month
                       </p>
 
@@ -2914,8 +3180,9 @@ function Forecast() {
                         {seasonalData.lowest_month}
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-500">
-                        Demand {formatNumber(
+                      <p className="mt-1 text-xs text-white/40">
+                        Demand{" "}
+                        {formatNumber(
                           seasonalData.lowest_demand
                         )}
                       </p>
@@ -2923,9 +3190,18 @@ function Forecast() {
                     </div>
 
 
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-5">
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-lime-300/10
+                        bg-[#0B1220]
+                        p-5
+                        shadow-[0_0_10px_rgba(163,230,53,0.03)]
+                      "
+                    >
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">
                         Seasonal Swing
                       </p>
 
@@ -2935,16 +3211,25 @@ function Forecast() {
                         )}%
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-white/40">
                         Peak-to-low variation
                       </p>
 
                     </div>
 
 
-                    <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-5">
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-lime-300/15
+                        bg-[#0B1220]
+                        p-5
+                        shadow-[0_0_10px_rgba(163,230,53,0.04)]
+                      "
+                    >
 
-                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-600">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">
                         Pattern Strength
                       </p>
 
@@ -2952,7 +3237,7 @@ function Forecast() {
                         {seasonalData.seasonality_strength}
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-white/40">
                         Category seasonality
                       </p>
 
@@ -2967,7 +3252,19 @@ function Forecast() {
 
                   {seasonalChart && (
 
-                    <div className="mt-7 overflow-hidden rounded-3xl border border-white/5 bg-slate-950/60 p-4 sm:p-6">
+                    <div
+                      className="
+                        mt-7
+                        overflow-hidden
+                        rounded-2xl
+                        border
+                        border-lime-300/10
+                        bg-[#0B1220]
+                        p-4
+                        shadow-[0_0_12px_rgba(163,230,53,0.04)]
+                        sm:p-6
+                      "
+                    >
 
                       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 
@@ -2977,7 +3274,7 @@ function Forecast() {
                             12-Month Seasonal Curve
                           </h3>
 
-                          <p className="mt-1 text-xs text-slate-600">
+                          <p className="mt-1 text-xs text-white/35">
                             Actual historical months are shown with solid points.
                             Estimated months are shown with softer points.
                           </p>
@@ -2989,9 +3286,9 @@ function Forecast() {
 
                           <div className="flex items-center gap-2">
 
-                            <span className="h-2 w-2 rounded-full bg-lime-300" />
+                            <span className="h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_6px_rgba(163,230,53,0.7)]" />
 
-                            <span className="text-slate-500">
+                            <span className="text-white/45">
                               Observed
                             </span>
 
@@ -3002,7 +3299,7 @@ function Forecast() {
 
                             <span className="h-2 w-2 rounded-full bg-slate-500" />
 
-                            <span className="text-slate-500">
+                            <span className="text-white/45">
                               Estimated
                             </span>
 
@@ -3265,9 +3562,31 @@ function Forecast() {
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
 
-                        <div className="flex items-center gap-3 rounded-2xl border border-lime-300/10 bg-lime-300/[0.04] p-4">
+                        <div
+                          className="
+                            flex
+                            items-center
+                            gap-3
+                            rounded-xl
+                            border
+                            border-lime-300/15
+                            bg-lime-300/5
+                            p-4
+                            shadow-[0_0_10px_rgba(163,230,53,0.04)]
+                          "
+                        >
 
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-lime-300/10">
+                          <div
+                            className="
+                              flex
+                              h-9
+                              w-9
+                              items-center
+                              justify-center
+                              rounded-xl
+                              bg-lime-300/10
+                            "
+                          >
 
                             <TrendingUp className="h-4 w-4 text-lime-300" />
 
@@ -3275,7 +3594,7 @@ function Forecast() {
 
                           <div>
 
-                            <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                            <p className="text-[9px] uppercase tracking-wider text-white/35">
                               Seasonal Peak
                             </p>
 
@@ -3288,9 +3607,30 @@ function Forecast() {
                         </div>
 
 
-                        <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                        <div
+                          className="
+                            flex
+                            items-center
+                            gap-3
+                            rounded-xl
+                            border
+                            border-white/5
+                            bg-white/[0.02]
+                            p-4
+                          "
+                        >
 
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5">
+                          <div
+                            className="
+                              flex
+                              h-9
+                              w-9
+                              items-center
+                              justify-center
+                              rounded-xl
+                              bg-white/5
+                            "
+                          >
 
                             <TrendingDown className="h-4 w-4 text-slate-400" />
 
@@ -3298,11 +3638,11 @@ function Forecast() {
 
                           <div>
 
-                            <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                            <p className="text-[9px] uppercase tracking-wider text-white/35">
                               Seasonal Low
                             </p>
 
-                            <p className="text-sm font-black text-slate-300">
+                            <p className="text-sm font-black text-white/70">
                               {seasonalData.lowest_month}
                             </p>
 
@@ -3321,7 +3661,16 @@ function Forecast() {
                       SOURCE
                   ================================================== */}
 
-                  <div className="mt-5 rounded-2xl border border-white/5 bg-white/[0.015] p-4">
+                  <div
+                    className="
+                      mt-5
+                      rounded-xl
+                      border
+                      border-white/5
+                      bg-[#0B1220]
+                      p-4
+                    "
+                  >
 
                     <div className="flex gap-3">
 
@@ -3329,17 +3678,17 @@ function Forecast() {
 
                       <div>
 
-                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/45">
                           Analysis Basis
                         </p>
 
-                        <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                        <p className="mt-1 text-[11px] leading-5 text-white/35">
 
                           {seasonalData.data_source}
 
                           {" "}for the{" "}
 
-                          <span className="text-slate-400">
+                          <span className="text-white/55">
                             {seasonalData.category}
                           </span>
 
@@ -3387,17 +3736,30 @@ function Forecast() {
 
                   <div className="max-w-md text-center">
 
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.03]">
+                    <div
+                      className="
+                        mx-auto
+                        flex
+                        h-14
+                        w-14
+                        items-center
+                        justify-center
+                        rounded-2xl
+                        border
+                        border-white/5
+                        bg-[#0B1220]
+                      "
+                    >
 
-                      <Activity className="h-7 w-7 text-slate-700" />
+                      <Activity className="h-7 w-7 text-white/20" />
 
                     </div>
 
-                    <p className="mt-4 text-sm font-bold text-slate-400">
+                    <p className="mt-4 text-sm font-bold text-white/50">
                       Seasonal profile unavailable
                     </p>
 
-                    <p className="mt-2 text-xs leading-5 text-slate-600">
+                    <p className="mt-2 text-xs leading-5 text-white/30">
 
                       No historical seasonal pattern was found
                       for the selected product category.
@@ -3417,11 +3779,24 @@ function Forecast() {
               FOOTER NOTE
           ================================================== */}
 
-          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.015] p-4">
+          <div
+            className="
+              mt-6
+              flex
+              items-start
+              gap-3
+              rounded-xl
+              border
+              border-lime-300/10
+              bg-[#111C2E]
+              p-4
+              shadow-[0_0_10px_rgba(163,230,53,0.04)]
+            "
+          >
 
-            <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
+            <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-white/25" />
 
-            <p className="text-[11px] leading-5 text-slate-600">
+            <p className="text-[11px] leading-5 text-white/35">
 
               PricePilot AI forecasts are generated using the selected
               application product's demand, pricing and inventory inputs.

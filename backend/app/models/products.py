@@ -9,11 +9,38 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     name = Column(String, nullable=False)
+
     category = Column(String, nullable=False)
 
-    current_price = Column(Float, nullable=False)
-    stock = Column(Integer, nullable=False)
+    # ========================================================
+    # PRICING
+    # ========================================================
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    cost_price = Column(
+        Float,
+        nullable=False,
+        default=0.0
+    )
 
+    current_price = Column(
+        Float,
+        nullable=False
+    )
 
+    # ========================================================
+    # INVENTORY
+    # ========================================================
+
+    stock = Column(
+        Integer,
+        nullable=False
+    )
+
+    # ========================================================
+    # TIMESTAMP
+    # ========================================================
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )

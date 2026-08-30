@@ -387,9 +387,7 @@ function UserManagement() {
 
           <div>
 
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.2em] text-lime-300">
-              PricePilot AI
-            </p>
+            
 
             <h1 className="text-3xl font-bold tracking-tight text-white">
               User Management
