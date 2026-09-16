@@ -57,10 +57,11 @@ function BusinessIntelligenceReport() {
       setError("");
 
       const response = await API.get("/products/", {
-        params: {
-          order: "asc",
-        },
-      });
+  params: {
+    order: "asc",
+    limit: 100,
+  },
+});
 
 
       let productData = [];
