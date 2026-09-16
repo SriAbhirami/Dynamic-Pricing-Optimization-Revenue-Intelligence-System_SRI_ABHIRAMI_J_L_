@@ -224,3 +224,6 @@ datasets/processed/demand_forecasting_features.csv
 
 .env
 **/.env
+# Playwright browser sessions
+backend/amazon_session/
+backend/flipkart_session/
