@@ -35,6 +35,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "https://pricepilot-frontend-54je.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
