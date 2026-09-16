@@ -62,11 +62,12 @@ function RecentProducts() {
 
       const response = await API.get("/products/", {
         params: {
-          name: search || undefined,
-          category: category || undefined,
-          sort_by: sortBy || undefined,
-          order,
-        },
+  name: search || undefined,
+  category: category || undefined,
+  sort_by: sortBy || undefined,
+  order,
+  limit: 100,
+},
       });
 
       if (
