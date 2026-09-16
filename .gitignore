@@ -227,3 +227,6 @@ datasets/processed/demand_forecasting_features.csv
 # Playwright browser sessions
 backend/amazon_session/
 backend/flipkart_session/
+
+# PostgreSQL database backups
+*.dump
