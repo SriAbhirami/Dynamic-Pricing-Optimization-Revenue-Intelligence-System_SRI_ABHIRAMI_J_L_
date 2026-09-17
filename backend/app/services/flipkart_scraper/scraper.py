@@ -8,7 +8,6 @@ import requests
 
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 
-# Flipkart Product Search Scraper
 APIFY_ACTOR_ID = "S8WYPuFl8SWsfvLXG"
 
 APIFY_URL = (
@@ -24,9 +23,6 @@ APIFY_URL = (
 def scrape_flipkart_product(product_name: str):
     """
     Fetch the first Flipkart search result using Apify.
-
-    The first result is used as the competitor product,
-    following the same approach as the Amazon scraper.
     """
 
     product_name = product_name.strip()
@@ -39,7 +35,7 @@ def scrape_flipkart_product(product_name: str):
     print("=" * 60)
 
     # --------------------------------------------------------
-    # Validate token
+    # Check Apify token
     # --------------------------------------------------------
 
     if not APIFY_API_TOKEN:
@@ -55,16 +51,12 @@ def scrape_flipkart_product(product_name: str):
         }
 
     # --------------------------------------------------------
-    # Apify Actor input
+    # Flipkart Actor input
     # --------------------------------------------------------
 
     actor_input = {
-        "searchQueries": [product_name],
-        "searchQuery": product_name,
-        "maxResults": 1,
-        "maxResultsPerQuery": 1,
-        "maxPages": 1,
-        "country": "IN"
+        "keyword": product_name,
+        "maxItems": 1
     }
 
     headers = {
@@ -75,7 +67,7 @@ def scrape_flipkart_product(product_name: str):
     try:
         print("Starting Flipkart Apify Actor...")
         print(f"Actor ID: {APIFY_ACTOR_ID}")
-        print(f"Search query: {product_name}")
+        print(f"Search keyword: {product_name}")
 
         response = requests.post(
             APIFY_URL,
@@ -92,7 +84,7 @@ def scrape_flipkart_product(product_name: str):
         print(f"Apify HTTP status: {response.status_code}")
 
         # ----------------------------------------------------
-        # Check response
+        # Check HTTP response
         # ----------------------------------------------------
 
         if response.status_code not in (200, 201):
@@ -109,7 +101,7 @@ def scrape_flipkart_product(product_name: str):
             }
 
         # ----------------------------------------------------
-        # Parse results
+        # Parse response
         # ----------------------------------------------------
 
         results = response.json()
@@ -118,7 +110,6 @@ def scrape_flipkart_product(product_name: str):
 
         if not isinstance(results, list):
             print("Unexpected Apify response format.")
-            print(f"Response type: {type(results).__name__}")
 
             return {
                 "Requested Product": product_name,
@@ -142,7 +133,7 @@ def scrape_flipkart_product(product_name: str):
             }
 
         # ----------------------------------------------------
-        # First result
+        # First Flipkart result
         # ----------------------------------------------------
 
         first_result = results[0]
@@ -168,17 +159,19 @@ def scrape_flipkart_product(product_name: str):
 
         price = None
 
+        # Prefer the current selling price
+        # rather than the strike-off/MRP price.
         for price_item in prices:
-            if not price_item.get("strike_off", False):
+            if price_item.get("strike_off") is False:
                 price = price_item.get("value")
                 break
 
-        # Fallback: use first price if no non-strike price exists
+        # Fallback
         if price is None and prices:
             price = prices[0].get("value")
 
         # ----------------------------------------------------
-        # Construct Flipkart URL
+        # Build Flipkart URL
         # ----------------------------------------------------
 
         flipkart_url = "N/A"
@@ -190,7 +183,7 @@ def scrape_flipkart_product(product_name: str):
                 flipkart_url = f"https://www.flipkart.com{base_url}"
 
         # ----------------------------------------------------
-        # Log first result
+        # Print result
         # ----------------------------------------------------
 
         print("\nFirst Flipkart result:")
@@ -204,7 +197,7 @@ def scrape_flipkart_product(product_name: str):
         # ----------------------------------------------------
 
         if price is None:
-            print("Flipkart result does not contain a price.")
+            print("Flipkart product price unavailable.")
 
             return {
                 "Requested Product": product_name,
