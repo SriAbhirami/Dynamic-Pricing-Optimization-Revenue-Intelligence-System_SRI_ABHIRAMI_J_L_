@@ -105,7 +105,7 @@ def scrape_competitor_price(product_name: str):
         # Handle API errors
         # ----------------------------------------------------
 
-        if response.status_code != 200:
+        if response.status_code not in (200, 201):
             print("Apify request failed.")
             print(f"Response: {response.text[:1000]}")
 
