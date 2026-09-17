@@ -2,24 +2,17 @@
 # DEMAND FORECASTING API PREDICTION ENGINE
 # ============================================================
 #
-# This file adapts the API request format to the 50-feature
-# production demand forecasting model.
+# This file adapts the API request format to the
+# 20-feature production demand forecasting model.
 #
 # Production model:
-#     Random Forest
+#     XGBRegressor
 #
-# The production model was trained using the features from:
-#
-#     datasets/processed/demand_forecasting_features.csv
-#
-# Therefore the API must construct the same feature set before
-# calling the model.
+# The API constructs the exact feature structure expected
+# by the saved preprocessing pipeline.
 #
 # ============================================================
 
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
 
 from .model import (
@@ -31,75 +24,33 @@ from .model import (
 # ============================================================
 # PRODUCTION FEATURES
 # ============================================================
+#
+# These are the exact 20 features expected by the saved
+# demand forecasting preprocessor.
+#
+# ============================================================
 
 FEATURE_COLUMNS = [
-
-    "sales",
-    "revenue",
-    "avg_price",
-    "total_stock",
-    "active_products",
-    "active_stores",
-    "total_products",
-    "total_stores",
-
-    "day_of_week",
-    "day_of_month",
-    "week_of_year",
-    "month",
-    "quarter",
-    "year",
-    "day_of_year",
-    "is_weekend",
-
-    "dow_sin",
-    "dow_cos",
-
-    "month_sin",
-    "month_cos",
-
-    "day_of_year_sin",
-    "day_of_year_cos",
-
-    "sales_lag_1",
-    "sales_lag_7",
-    "sales_lag_14",
-    "sales_lag_30",
-    "sales_lag_90",
-
-    "revenue_lag_1",
-    "revenue_lag_7",
-    "revenue_lag_30",
-
-    "price_lag_1",
-    "price_lag_7",
-
-    "price_change",
+    "product_id",
+    "category",
+    "brand",
+    "region",
+    "channel",
+    "season",
+    "base_price",
+    "current_price",
     "price_change_pct",
-
-    "stock_lag_1",
-    "stock_lag_7",
-
-    "stock_change",
-    "stock_change_pct",
-
+    "discount_pct",
+    "promotion_type",
+    "inventory_level",
     "stockout_flag",
-
-    "rolling_sales_7",
-    "rolling_sales_14",
-    "rolling_sales_30",
-    "rolling_sales_90",
-
-    "sales_std_7",
-    "sales_std_30",
-
-    "rolling_revenue_7",
-    "rolling_revenue_30",
-
-    "sales_growth_7d",
-    "sales_growth_30d",
-
-    "revenue_per_unit"
+    "year",
+    "month",
+    "day",
+    "day_of_week",
+    "sales_rolling_3",
+    "sales_rolling_7",
+    "sales_rolling_14"
 ]
 
 
@@ -107,579 +58,175 @@ FEATURE_COLUMNS = [
 # CREATE MODEL INPUT
 # ============================================================
 
-def build_model_input(input_data: dict) -> pd.DataFrame:
+def build_model_input(
+    input_data: dict
+) -> pd.DataFrame:
     """
-    Convert the API request into the exact 50-feature structure
-    expected by the production Random Forest model.
+    Convert the API request into the exact 20-feature
+    structure expected by the production demand model.
     """
-
-    # ========================================================
-    # BASIC INPUT VALUES
-    # ========================================================
-
-    base_price = float(
-        input_data.get(
-            "base_price",
-            0
-        )
-    )
-
-    current_price = float(
-        input_data.get(
-            "current_price",
-            base_price
-        )
-    )
-
-    price_change_pct = float(
-        input_data.get(
-            "price_change_pct",
-            0
-        )
-    )
-
-    discount_pct = float(
-        input_data.get(
-            "discount_pct",
-            0
-        )
-    )
-
-    inventory = float(
-        input_data.get(
-            "inventory_level",
-            0
-        )
-    )
-
-    year = int(
-        input_data.get(
-            "year",
-            2020
-        )
-    )
-
-    month = int(
-        input_data.get(
-            "month",
-            1
-        )
-    )
-
-    day = int(
-        input_data.get(
-            "day",
-            1
-        )
-    )
-
-    day_of_week = int(
-        input_data.get(
-            "day_of_week",
-            0
-        )
-    )
-
-
-    # ========================================================
-    # SALES SIGNALS
-    # ========================================================
-
-    sales_3 = float(
-        input_data.get(
-            "sales_rolling_3",
-            0
-        )
-    )
-
-    sales_7 = float(
-        input_data.get(
-            "sales_rolling_7",
-            0
-        )
-    )
-
-    sales_14 = float(
-        input_data.get(
-            "sales_rolling_14",
-            0
-        )
-    )
-
-
-    # ========================================================
-    # ESTIMATE CURRENT DAILY SALES
-    # ========================================================
-
-    if sales_3 > 0:
-
-        current_sales = sales_3
-
-    elif sales_7 > 0:
-
-        current_sales = sales_7
-
-    elif sales_14 > 0:
-
-        current_sales = (
-            sales_14 / 14.0
-        )
-
-    else:
-
-        current_sales = 0.0
-
-
-    current_sales = max(
-        current_sales,
-        0.0
-    )
-
-
-    # ========================================================
-    # REVENUE
-    # ========================================================
-
-    current_revenue = (
-        current_sales
-        * current_price
-    )
-
-
-    # ========================================================
-    # DATE FEATURES
-    # ========================================================
-
-    try:
-
-        current_date = pd.Timestamp(
-            year=year,
-            month=month,
-            day=day
-        )
-
-    except Exception:
-
-        current_date = pd.Timestamp.today()
-
-        year = current_date.year
-        month = current_date.month
-        day = current_date.day
-        day_of_week = current_date.dayofweek
-
-
-    day_of_month = (
-        current_date.day
-    )
-
-    week_of_year = int(
-        current_date.isocalendar().week
-    )
-
-    quarter = (
-        current_date.quarter
-    )
-
-    day_of_year = (
-        current_date.dayofyear
-    )
-
-    is_weekend = int(
-        day_of_week >= 5
-    )
-
-
-    # ========================================================
-    # CYCLICAL FEATURES
-    # ========================================================
-
-    dow_sin = np.sin(
-        2 * np.pi * day_of_week / 7
-    )
-
-    dow_cos = np.cos(
-        2 * np.pi * day_of_week / 7
-    )
-
-    month_sin = np.sin(
-        2 * np.pi * month / 12
-    )
-
-    month_cos = np.cos(
-        2 * np.pi * month / 12
-    )
-
-    day_of_year_sin = np.sin(
-        2 * np.pi * day_of_year / 365
-    )
-
-    day_of_year_cos = np.cos(
-        2 * np.pi * day_of_year / 365
-    )
-
-
-    # ========================================================
-    # SALES LAGS
-    # ========================================================
-
-    sales_lag_1 = current_sales
-
-    sales_lag_7 = sales_7
-
-    sales_lag_14 = sales_14
-
-    sales_lag_30 = sales_14
-
-    sales_lag_90 = sales_14
-
-
-    # ========================================================
-    # REVENUE LAGS
-    # ========================================================
-
-    revenue_lag_1 = current_revenue
-
-    revenue_lag_7 = (
-        sales_7
-        * current_price
-    )
-
-    revenue_lag_30 = (
-        sales_14
-        * current_price
-    )
-
-
-    # ========================================================
-    # PRICE LAGS
-    # ========================================================
-
-    price_lag_1 = current_price
-
-    price_lag_7 = (
-        base_price
-        if base_price > 0
-        else current_price
-    )
-
-
-    # ========================================================
-    # PRICE CHANGE
-    # ========================================================
-
-    price_change = (
-        current_price
-        - price_lag_1
-    )
-
-    # Since current price is the latest known price,
-    # use the supplied percentage as the historical signal.
-
-    if price_change_pct == 0:
-
-        price_change_pct_value = 0.0
-
-    else:
-
-        price_change_pct_value = (
-            price_change_pct
-        )
-
-
-    # ========================================================
-    # STOCK FEATURES
-    # ========================================================
-
-    total_stock = max(
-        inventory,
-        0.0
-    )
-
-    stock_lag_1 = total_stock
-
-    stock_lag_7 = total_stock
-
-    stock_change = 0.0
-
-    stock_change_pct = 0.0
-
-    stockout_flag = int(
-        total_stock <= 0
-    )
-
-
-    # ========================================================
-    # ROLLING SALES
-    # ========================================================
-
-    rolling_sales_7 = (
-        sales_7
-    )
-
-    rolling_sales_14 = (
-        sales_14
-    )
-
-    rolling_sales_30 = (
-        sales_14
-    )
-
-    rolling_sales_90 = (
-        sales_14
-    )
-
-
-    # ========================================================
-    # SALES VOLATILITY
-    # ========================================================
-
-    sales_values = np.array(
-
-        [
-            sales_3,
-            sales_7,
-            sales_14
-        ],
-
-        dtype=float
-
-    )
-
-    sales_std_7 = float(
-        np.std(
-            sales_values
-        )
-    )
-
-    sales_std_30 = float(
-        np.std(
-            sales_values
-        )
-    )
-
-
-    # ========================================================
-    # ROLLING REVENUE
-    # ========================================================
-
-    rolling_revenue_7 = (
-        rolling_sales_7
-        * current_price
-    )
-
-    rolling_revenue_30 = (
-        rolling_sales_30
-        * current_price
-    )
-
-
-    # ========================================================
-    # SALES GROWTH
-    # ========================================================
-
-    if sales_14 > 0:
-
-        sales_growth_7d = (
-            (
-                sales_7
-                - sales_14
-            )
-            /
-            abs(sales_14)
-        )
-
-    else:
-
-        sales_growth_7d = 0.0
-
-
-    sales_growth_30d = (
-        sales_growth_7d
-    )
-
-
-    # ========================================================
-    # REVENUE PER UNIT
-    # ========================================================
-
-    revenue_per_unit = (
-        current_price
-    )
-
-
-    # ========================================================
-    # BUILD FEATURE ROW
-    # ========================================================
 
     row = {
 
-        "sales":
-            current_sales,
+        "product_id": str(
+            input_data.get(
+                "product_id",
+                ""
+            )
+        ),
 
-        "revenue":
-            current_revenue,
+        "category": str(
+            input_data.get(
+                "category",
+                ""
+            )
+        ),
 
-        "avg_price":
-            current_price,
+        "brand": str(
+            input_data.get(
+                "brand",
+                ""
+            )
+        ),
 
-        "total_stock":
-            total_stock,
+        "region": str(
+            input_data.get(
+                "region",
+                ""
+            )
+        ),
 
-        # API request represents one product.
-        "active_products":
-            1,
+        "channel": str(
+            input_data.get(
+                "channel",
+                ""
+            )
+        ),
 
-        "active_stores":
-            1,
+        "season": str(
+            input_data.get(
+                "season",
+                ""
+            )
+        ),
 
-        "total_products":
-            1,
+        "base_price": float(
+            input_data.get(
+                "base_price",
+                0
+            )
+        ),
 
-        "total_stores":
-            1,
+        "current_price": float(
+            input_data.get(
+                "current_price",
+                0
+            )
+        ),
 
-        "day_of_week":
-            day_of_week,
+        "price_change_pct": float(
+            input_data.get(
+                "price_change_pct",
+                0
+            )
+        ),
 
-        "day_of_month":
-            day_of_month,
+        "discount_pct": float(
+            input_data.get(
+                "discount_pct",
+                0
+            )
+        ),
 
-        "week_of_year":
-            week_of_year,
+        "promotion_type": str(
+            input_data.get(
+                "promotion_type",
+                ""
+            )
+        ),
 
-        "month":
-            month,
+        "inventory_level": float(
+            input_data.get(
+                "inventory_level",
+                0
+            )
+        ),
 
-        "quarter":
-            quarter,
+        "stockout_flag": int(
+            input_data.get(
+                "stockout_flag",
+                0
+            )
+        ),
 
-        "year":
-            year,
+        "year": int(
+            input_data.get(
+                "year",
+                2026
+            )
+        ),
 
-        "day_of_year":
-            day_of_year,
+        "month": int(
+            input_data.get(
+                "month",
+                1
+            )
+        ),
 
-        "is_weekend":
-            is_weekend,
+        "day": int(
+            input_data.get(
+                "day",
+                1
+            )
+        ),
 
-        "dow_sin":
-            dow_sin,
+        "day_of_week": int(
+            input_data.get(
+                "day_of_week",
+                0
+            )
+        ),
 
-        "dow_cos":
-            dow_cos,
+        "sales_rolling_3": float(
+            input_data.get(
+                "sales_rolling_3",
+                0
+            )
+        ),
 
-        "month_sin":
-            month_sin,
+        "sales_rolling_7": float(
+            input_data.get(
+                "sales_rolling_7",
+                0
+            )
+        ),
 
-        "month_cos":
-            month_cos,
-
-        "day_of_year_sin":
-            day_of_year_sin,
-
-        "day_of_year_cos":
-            day_of_year_cos,
-
-        "sales_lag_1":
-            sales_lag_1,
-
-        "sales_lag_7":
-            sales_lag_7,
-
-        "sales_lag_14":
-            sales_lag_14,
-
-        "sales_lag_30":
-            sales_lag_30,
-
-        "sales_lag_90":
-            sales_lag_90,
-
-        "revenue_lag_1":
-            revenue_lag_1,
-
-        "revenue_lag_7":
-            revenue_lag_7,
-
-        "revenue_lag_30":
-            revenue_lag_30,
-
-        "price_lag_1":
-            price_lag_1,
-
-        "price_lag_7":
-            price_lag_7,
-
-        "price_change":
-            price_change,
-
-        "price_change_pct":
-            price_change_pct_value,
-
-        "stock_lag_1":
-            stock_lag_1,
-
-        "stock_lag_7":
-            stock_lag_7,
-
-        "stock_change":
-            stock_change,
-
-        "stock_change_pct":
-            stock_change_pct,
-
-        "stockout_flag":
-            stockout_flag,
-
-        "rolling_sales_7":
-            rolling_sales_7,
-
-        "rolling_sales_14":
-            rolling_sales_14,
-
-        "rolling_sales_30":
-            rolling_sales_30,
-
-        "rolling_sales_90":
-            rolling_sales_90,
-
-        "sales_std_7":
-            sales_std_7,
-
-        "sales_std_30":
-            sales_std_30,
-
-        "rolling_revenue_7":
-            rolling_revenue_7,
-
-        "rolling_revenue_30":
-            rolling_revenue_30,
-
-        "sales_growth_7d":
-            sales_growth_7d,
-
-        "sales_growth_30d":
-            sales_growth_30d,
-
-        "revenue_per_unit":
-            revenue_per_unit
-
+        "sales_rolling_14": float(
+            input_data.get(
+                "sales_rolling_14",
+                0
+            )
+        )
     }
 
 
     # ========================================================
-    # DATAFRAME
+    # CREATE ONE-ROW DATAFRAME
     # ========================================================
 
     input_df = pd.DataFrame(
         [row]
     )
 
-    # Guarantee exact training feature order.
+
+    # ========================================================
+    # GUARANTEE EXACT FEATURE ORDER
+    # ========================================================
 
     input_df = input_df[
         FEATURE_COLUMNS
     ]
+
 
     return input_df
 
@@ -693,12 +240,17 @@ def predict_demand(
 ) -> float:
     """
     Generate a demand prediction using the production
-    Random Forest model.
+    XGBRegressor model.
     """
 
     input_df = build_model_input(
         input_data
     )
+
+
+    # ========================================================
+    # PREPROCESS INPUT
+    # ========================================================
 
     processed_data = (
         preprocessor.transform(
@@ -706,22 +258,32 @@ def predict_demand(
         )
     )
 
+
+    # ========================================================
+    # MODEL PREDICTION
+    # ========================================================
+
     prediction = (
         model.predict(
             processed_data
         )
     )
 
+
     predicted_demand = float(
         prediction[0]
     )
 
-    # Demand cannot be negative.
+
+    # ========================================================
+    # DEMAND CANNOT BE NEGATIVE
+    # ========================================================
 
     predicted_demand = max(
         predicted_demand,
         0.0
     )
+
 
     return predicted_demand
 
@@ -747,6 +309,7 @@ def generate_demand_forecast(
     using projected calendar, sales and inventory features.
     """
 
+
     # ========================================================
     # CURRENT PREDICTION
     # ========================================================
@@ -759,7 +322,7 @@ def generate_demand_forecast(
 
 
     # ========================================================
-    # HORIZONS
+    # FORECAST HORIZONS
     # ========================================================
 
     horizons = {
@@ -875,7 +438,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Future date
+        # FUTURE DATE
         # ----------------------------------------------------
 
         forecast_date = (
@@ -905,7 +468,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Trend attenuation by horizon
+        # TREND ATTENUATION BY HORIZON
         # ----------------------------------------------------
 
         if days_ahead <= 7:
@@ -956,7 +519,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Project sales signals
+        # PROJECT SALES SIGNALS
         # ----------------------------------------------------
 
         forecast_input[
@@ -982,7 +545,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Inventory projection
+        # INVENTORY PROJECTION
         # ----------------------------------------------------
 
         current_inventory = float(
@@ -1042,7 +605,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Stockout
+        # STOCKOUT
         # ----------------------------------------------------
 
         forecast_input[
@@ -1053,7 +616,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # Predict
+        # PREDICT
         # ----------------------------------------------------
 
         predicted_demand = (
