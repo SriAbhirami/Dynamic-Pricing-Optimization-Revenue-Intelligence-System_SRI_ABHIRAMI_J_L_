@@ -1,739 +1,287 @@
-from playwright.sync_api import sync_playwright
-from playwright_stealth import Stealth
-import time
-import random
 import os
-import re
+import requests
 
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-FLIPKART_URL = "https://www.flipkart.com"
+APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
 
-PAGE_TIMEOUT = 60000
+# Flipkart Product Search Scraper
+APIFY_ACTOR_ID = "S8WYPuFl8SWsfvLXG"
 
-IS_RENDER = os.getenv("RENDER") is not None
-
-
-# ============================================================
-# HELPER
-# ============================================================
-
-def human_delay(min_sec=2, max_sec=4):
-    """Mimic human-like delays."""
-    time.sleep(
-        random.uniform(
-            min_sec,
-            max_sec
-        )
-    )
+APIFY_URL = (
+    f"https://api.apify.com/v2/actors/"
+    f"{APIFY_ACTOR_ID}/run-sync-get-dataset-items"
+)
 
 
 # ============================================================
-# PRICE EXTRACTION
+# FLIPKART COMPETITOR SCRAPER
 # ============================================================
 
-def extract_price_from_text(text):
+def scrape_flipkart_product(product_name: str):
     """
-    Extract an Indian Rupee price from visible page text.
+    Fetch the first Flipkart search result using Apify.
 
-    Examples:
-        ₹80,900
-        ₹79,999
-        Rs. 80,900
-        INR 80,900
+    The first result is used as the competitor product,
+    following the same approach as the Amazon scraper.
     """
 
-    patterns = [
-        r"₹\s*[\d,]+",
-        r"Rs\.?\s*[\d,]+",
-        r"INR\s*[\d,]+"
-    ]
+    product_name = product_name.strip()
 
-    for pattern in patterns:
+    print("\n")
+    print("=" * 60)
+    print("FLIPKART COMPETITOR SCRAPER - APIFY")
+    print("=" * 60)
+    print(f"Requested product: {product_name}")
+    print("=" * 60)
 
-        matches = re.findall(
-            pattern,
-            text,
-            flags=re.IGNORECASE
-        )
+    # --------------------------------------------------------
+    # Validate token
+    # --------------------------------------------------------
 
-        if matches:
+    if not APIFY_API_TOKEN:
+        print("ERROR: APIFY_API_TOKEN is not configured.")
 
-            return matches[0].strip()
-
-    return "N/A"
-
-
-# ============================================================
-# BROWSER LAUNCH
-# ============================================================
-
-def launch_flipkart_browser(playwright):
-
-    user_data_dir = os.path.join(
-        os.getcwd(),
-        "flipkart_session"
-    )
-
-    print("\n========================================")
-    print("FLIPKART BROWSER CONFIGURATION")
-    print("========================================")
-    print(
-        f"Render environment : {IS_RENDER}"
-    )
-    print(
-        f"Headless mode      : {IS_RENDER}"
-    )
-    print(
-        f"User data directory: {user_data_dir}"
-    )
-    print("========================================")
-
-    browser = (
-        playwright.chromium
-        .launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=IS_RENDER,
-            viewport={
-                "width": 1366,
-                "height": 768
-            },
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage"
-            ]
-        )
-    )
-
-    return browser
-
-
-# ============================================================
-# STEALTH
-# ============================================================
-
-def apply_stealth(page):
-
-    try:
-
-        stealth = Stealth()
-
-        stealth.apply_stealth_sync(
-            page
-        )
-
-        print(
-            "Playwright stealth applied."
-        )
-
-    except Exception as e:
-
-        print(
-            "Warning: Could not apply "
-            f"stealth: {type(e).__name__}: {e}"
-        )
-
-
-# ============================================================
-# FLIPKART COMPETITOR PRICE SCRAPER
-# ============================================================
-
-def scrape_flipkart_product(product_name):
-
-    """
-    Search Flipkart for a product and return
-    the first related product and its current price.
-
-    Current deployment version intentionally
-    keeps first-result matching.
-
-    Returns:
-
-        {
-            "Requested Product": "...",
-            "Flipkart Product": "...",
-            "Price": "₹..."
+        return {
+            "Requested Product": product_name,
+            "Flipkart Product": "N/A",
+            "Price": "N/A",
+            "Product ID": "N/A",
+            "URL": "N/A",
+            "Error": "APIFY_API_TOKEN is not configured"
         }
-    """
 
-    result = {
-        "Requested Product": product_name,
-        "Flipkart Product": "N/A",
-        "Price": "N/A"
+    # --------------------------------------------------------
+    # Apify Actor input
+    # --------------------------------------------------------
+
+    actor_input = {
+        "searchQueries": [product_name],
+        "searchQuery": product_name,
+        "maxResults": 1,
+        "maxResultsPerQuery": 1,
+        "maxPages": 1,
+        "country": "IN"
     }
 
-    browser = None
+    headers = {
+        "Authorization": f"Bearer {APIFY_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        print("Starting Flipkart Apify Actor...")
+        print(f"Actor ID: {APIFY_ACTOR_ID}")
+        print(f"Search query: {product_name}")
+
+        response = requests.post(
+            APIFY_URL,
+            headers=headers,
+            json=actor_input,
+            params={
+                "format": "json",
+                "clean": "true",
+                "limit": "1"
+            },
+            timeout=300
+        )
+
+        print(f"Apify HTTP status: {response.status_code}")
+
+        # ----------------------------------------------------
+        # Check response
+        # ----------------------------------------------------
+
+        if response.status_code not in (200, 201):
+            print("Flipkart Apify request failed.")
+            print(f"Response: {response.text[:1000]}")
+
+            return {
+                "Requested Product": product_name,
+                "Flipkart Product": "N/A",
+                "Price": "N/A",
+                "Product ID": "N/A",
+                "URL": "N/A",
+                "Error": f"Apify returned HTTP {response.status_code}"
+            }
+
+        # ----------------------------------------------------
+        # Parse results
+        # ----------------------------------------------------
+
+        results = response.json()
+
+        print(f"Apify returned {len(results)} result(s).")
+
+        if not isinstance(results, list):
+            print("Unexpected Apify response format.")
+            print(f"Response type: {type(results).__name__}")
+
+            return {
+                "Requested Product": product_name,
+                "Flipkart Product": "N/A",
+                "Price": "N/A",
+                "Product ID": "N/A",
+                "URL": "N/A",
+                "Error": "Unexpected Apify response format"
+            }
+
+        if not results:
+            print("No Flipkart products found.")
+
+            return {
+                "Requested Product": product_name,
+                "Flipkart Product": "N/A",
+                "Price": "N/A",
+                "Product ID": "N/A",
+                "URL": "N/A",
+                "Error": "No Flipkart results found"
+            }
+
+        # ----------------------------------------------------
+        # First result
+        # ----------------------------------------------------
+
+        first_result = results[0]
+
+        titles = first_result.get("titles") or {}
+        pricing = first_result.get("pricing") or {}
+
+        product_title = (
+            titles.get("title")
+            or titles.get("new_title")
+            or "Flipkart Product"
+        )
+
+        product_id = first_result.get("id")
+
+        base_url = first_result.get("base_url")
+
+        # ----------------------------------------------------
+        # Extract current selling price
+        # ----------------------------------------------------
+
+        prices = pricing.get("prices") or []
+
+        price = None
+
+        for price_item in prices:
+            if not price_item.get("strike_off", False):
+                price = price_item.get("value")
+                break
 
-    with sync_playwright() as p:
+        # Fallback: use first price if no non-strike price exists
+        if price is None and prices:
+            price = prices[0].get("value")
 
-        print("\n========================================")
-        print("FLIPKART COMPETITOR SCRAPER")
-        print("========================================")
+        # ----------------------------------------------------
+        # Construct Flipkart URL
+        # ----------------------------------------------------
 
-        try:
+        flipkart_url = "N/A"
 
-            # =================================================
-            # LAUNCH BROWSER
-            # =================================================
-
-            browser = launch_flipkart_browser(
-                p
-            )
-
-            page = (
-                browser.pages[0]
-                if browser.pages
-                else browser.new_page()
-            )
-
-            apply_stealth(
-                page
-            )
-
-            # =================================================
-            # OPEN FLIPKART
-            # =================================================
-
-            print(
-                "\nOpening Flipkart..."
-            )
-
-            page.goto(
-                FLIPKART_URL,
-                wait_until="domcontentloaded",
-                timeout=PAGE_TIMEOUT
-            )
-
-            human_delay(
-                3,
-                4
-            )
-
-            print(
-                f"Current URL: {page.url}"
-            )
-
-            # =================================================
-            # CLOSE LOGIN POPUP
-            # =================================================
-
-            close_buttons = [
-
-                "button._2KpZ6l._2doB4z",
-
-                "button[aria-label='Close']",
-
-                "button[title='✕']"
-
-            ]
-
-            for selector in close_buttons:
-
-                locator = page.locator(
-                    selector
-                )
-
-                if locator.count() > 0:
-
-                    try:
-
-                        locator.first.click(
-                            timeout=2000
-                        )
-
-                        human_delay(
-                            1,
-                            2
-                        )
-
-                        print(
-                            "Flipkart popup closed."
-                        )
-
-                        break
-
-                    except Exception:
-                        pass
-
-            # =================================================
-            # SEARCH
-            # =================================================
-
-            print(
-                f"\nSearching Flipkart for:"
-            )
-
-            print(
-                product_name
-            )
-
-            search_box = page.locator(
-                "input[name='q']"
-            )
-
-            if search_box.count() == 0:
-
-                print(
-                    "\n================================"
-                )
-
-                print(
-                    "FLIPKART SEARCH BOX NOT FOUND"
-                )
-
-                print(
-                    "================================"
-                )
-
-                print(
-                    f"Current URL: {page.url}"
-                )
-
-                return result
-
-            search_box.first.fill(
-                product_name
-            )
-
-            human_delay(
-                0.5,
-                1
-            )
-
-            search_box.first.press(
-                "Enter"
-            )
-
-            page.wait_for_load_state(
-                "domcontentloaded",
-                timeout=PAGE_TIMEOUT
-            )
-
-            human_delay(
-                3,
-                5
-            )
-
-            print(
-                f"\nSearch URL:"
-            )
-
-            print(
-                page.url
-            )
-
-            # =================================================
-            # SEARCH RESULTS
-            # =================================================
-
-            print(
-                "\nLooking for Flipkart products..."
-            )
-
-            products = page.locator(
-                "div[data-id]"
-            )
-
-            product_count = products.count()
-
-            print(
-                f"Found {product_count} "
-                f"product containers."
-            )
-
-            if product_count == 0:
-
-                print(
-                    "\nNo Flipkart products found."
-                )
-
-                print(
-                    f"Current URL: {page.url}"
-                )
-
-                return result
-
-            # =================================================
-            # PRODUCT LINKS
-            # =================================================
-
-            print(
-                "\nFinding Flipkart product links..."
-            )
-
-            links = page.locator(
-                "a[href*='/p/']"
-            )
-
-            link_count = links.count()
-
-            print(
-                f"Found {link_count} "
-                f"possible product links."
-            )
-
-            product_link = None
-
-            for i in range(
-                min(
-                    link_count,
-                    20
-                )
-            ):
-
-                try:
-
-                    href = (
-                        links
-                        .nth(i)
-                        .get_attribute(
-                            "href"
-                        )
-                    )
-
-                    if (
-                        href
-                        and
-                        "/p/" in href
-                    ):
-
-                        product_link = href
-
-                        break
-
-                except Exception:
-                    continue
-
-            if not product_link:
-
-                print(
-                    "\nCould not find a "
-                    "Flipkart product link."
-                )
-
-                return result
-
-            # =================================================
-            # BUILD FULL URL
-            # =================================================
-
-            if product_link.startswith(
-                "http"
-            ):
-
-                full_url = product_link
-
+        if base_url:
+            if base_url.startswith("http://") or base_url.startswith("https://"):
+                flipkart_url = base_url
             else:
-
-                full_url = (
-                    FLIPKART_URL
-                    + product_link
-                )
-
-            print(
-                f"\nSelected product URL:"
-            )
-
-            print(
-                full_url
-            )
-
-            # =================================================
-            # OPEN PRODUCT PAGE
-            # =================================================
-
-            print(
-                "\nOpening Flipkart product..."
-            )
-
-            page.goto(
-                full_url,
-                wait_until="domcontentloaded",
-                timeout=PAGE_TIMEOUT
-            )
-
-            human_delay(
-                4,
-                5
-            )
-
-            print(
-                f"Product URL: {page.url}"
-            )
-
-            # =================================================
-            # PRODUCT TITLE
-            # =================================================
-
-            title_selectors = [
-
-                "h1 span",
-
-                "h1",
-
-                "span.B_NuCI"
-
-            ]
-
-            for selector in title_selectors:
-
-                locator = page.locator(
-                    selector
-                )
-
-                if locator.count() == 0:
-                    continue
-
-                for i in range(
-                    min(
-                        locator.count(),
-                        5
-                    )
-                ):
-
-                    try:
-
-                        title = (
-                            locator
-                            .nth(i)
-                            .inner_text()
-                            .strip()
-                        )
-
-                        if (
-                            title
-                            and
-                            len(title) > 3
-                        ):
-
-                            result[
-                                "Flipkart Product"
-                            ] = title
-
-                            break
-
-                    except Exception:
-                        continue
-
-                if (
-                    result[
-                        "Flipkart Product"
-                    ] != "N/A"
-                ):
-
-                    break
-
-            # =================================================
-            # PRICE SELECTORS
-            # =================================================
-
-            price_selectors = [
-
-                "div.Nx9bqj",
-
-                "div._30jeq3",
-
-                "div._1_WHN1",
-
-                "div[class*='Nx9']",
-
-                "div[class*='price']",
-
-                "span[class*='price']"
-
-            ]
-
-            for selector in price_selectors:
-
-                locator = page.locator(
-                    selector
-                )
-
-                if locator.count() == 0:
-                    continue
-
-                for i in range(
-                    min(
-                        locator.count(),
-                        20
-                    )
-                ):
-
-                    try:
-
-                        text = (
-                            locator
-                            .nth(i)
-                            .inner_text()
-                            .strip()
-                        )
-
-                        if (
-                            "₹" in text
-                            and
-                            re.search(
-                                r"\d",
-                                text
-                            )
-                        ):
-
-                            result[
-                                "Price"
-                            ] = text
-
-                            break
-
-                    except Exception:
-                        continue
-
-                if (
-                    result["Price"]
-                    != "N/A"
-                ):
-
-                    break
-
-            # =================================================
-            # VISIBLE PAGE TEXT FALLBACK
-            # =================================================
-
-            if (
-                result["Price"]
-                == "N/A"
-            ):
-
-                print(
-                    "\nPrice selectors did not "
-                    "find the price."
-                )
-
-                print(
-                    "Searching visible page text..."
-                )
-
-                try:
-
-                    body_text = (
-                        page.locator(
-                            "body"
-                        )
-                        .inner_text()
-                    )
-
-                    extracted_price = (
-                        extract_price_from_text(
-                            body_text
-                        )
-                    )
-
-                    if (
-                        extracted_price
-                        != "N/A"
-                    ):
-
-                        result[
-                            "Price"
-                        ] = extracted_price
-
-                except Exception as e:
-
-                    print(
-                        "\nCould not read "
-                        "Flipkart page text."
-                    )
-
-                    print(
-                        f"Error type: "
-                        f"{type(e).__name__}"
-                    )
-
-                    print(
-                        f"Error message: {e}"
-                    )
-
-            # =================================================
-            # FINAL RESULT
-            # =================================================
-
-            print(
-                "\n========================================"
-            )
-
-            print(
-                "FLIPKART COMPETITOR RESULT"
-            )
-
-            print(
-                "========================================"
-            )
-
-            print(
-                f"Requested Product : "
-                f"{result['Requested Product']}"
-            )
-
-            print(
-                f"Flipkart Product  : "
-                f"{result['Flipkart Product']}"
-            )
-
-            print(
-                f"Competitor Price  : "
-                f"{result['Price']}"
-            )
-
-            print(
-                "========================================"
-            )
-
-            return result
-
-        except Exception as e:
-
-            print(
-                "\n========================================"
-            )
-
-            print(
-                "FLIPKART SCRAPER ERROR"
-            )
-
-            print(
-                "========================================"
-            )
-
-            print(
-                f"Requested product: "
-                f"{product_name}"
-            )
-
-            print(
-                f"Error type: "
-                f"{type(e).__name__}"
-            )
-
-            print(
-                f"Error message: "
-                f"{e}"
-            )
-
-            print(
-                "========================================"
-            )
-
-            return result
-
-        finally:
-
-            if browser is not None:
-
-                try:
-
-                    browser.close()
-
-                except Exception:
-                    pass
+                flipkart_url = f"https://www.flipkart.com{base_url}"
+
+        # ----------------------------------------------------
+        # Log first result
+        # ----------------------------------------------------
+
+        print("\nFirst Flipkart result:")
+        print(f"Title: {product_title}")
+        print(f"Product ID: {product_id}")
+        print(f"Price: {price}")
+        print(f"URL: {flipkart_url}")
+
+        # ----------------------------------------------------
+        # Price unavailable
+        # ----------------------------------------------------
+
+        if price is None:
+            print("Flipkart result does not contain a price.")
+
+            return {
+                "Requested Product": product_name,
+                "Flipkart Product": product_title,
+                "Price": "N/A",
+                "Product ID": product_id or "N/A",
+                "URL": flipkart_url,
+                "Error": "Flipkart product price unavailable"
+            }
+
+        # ----------------------------------------------------
+        # Final result
+        # ----------------------------------------------------
+
+        final_result = {
+            "Requested Product": product_name,
+            "Flipkart Product": product_title,
+            "Price": price,
+            "Product ID": product_id or "N/A",
+            "URL": flipkart_url
+        }
+
+        print("\n")
+        print("=" * 60)
+        print("FLIPKART COMPETITOR RESULT")
+        print("=" * 60)
+        print(final_result)
+        print("=" * 60)
+
+        return final_result
+
+    # --------------------------------------------------------
+    # Timeout
+    # --------------------------------------------------------
+
+    except requests.Timeout:
+        print("Flipkart Apify request timed out.")
+
+        return {
+            "Requested Product": product_name,
+            "Flipkart Product": "N/A",
+            "Price": "N/A",
+            "Product ID": "N/A",
+            "URL": "N/A",
+            "Error": "Apify request timed out"
+        }
+
+    # --------------------------------------------------------
+    # Network error
+    # --------------------------------------------------------
+
+    except requests.RequestException as e:
+        print("Flipkart Apify network error:")
+        print(f"{type(e).__name__}: {e}")
+
+        return {
+            "Requested Product": product_name,
+            "Flipkart Product": "N/A",
+            "Price": "N/A",
+            "Product ID": "N/A",
+            "URL": "N/A",
+            "Error": str(e)
+        }
+
+    # --------------------------------------------------------
+    # Unexpected error
+    # --------------------------------------------------------
+
+    except Exception as e:
+        print("Unexpected Flipkart scraper error:")
+        print(f"{type(e).__name__}: {e}")
+
+        return {
+            "Requested Product": product_name,
+            "Flipkart Product": "N/A",
+            "Price": "N/A",
+            "Product ID": "N/A",
+            "URL": "N/A",
+            "Error": str(e)
+        }
