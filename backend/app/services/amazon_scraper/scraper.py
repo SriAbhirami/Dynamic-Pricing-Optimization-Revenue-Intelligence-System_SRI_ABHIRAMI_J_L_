@@ -7,7 +7,22 @@ import os
 
 
 # ============================================================
-# HELPER FUNCTION
+# CONFIGURATION
+# ============================================================
+
+AMAZON_URL = "https://www.amazon.in"
+
+BROWSER_WIDTH = 1366
+BROWSER_HEIGHT = 768
+
+PAGE_TIMEOUT = 60000
+
+# Render automatically provides the RENDER environment variable.
+IS_RENDER = os.getenv("RENDER") is not None
+
+
+# ============================================================
+# HELPER
 # ============================================================
 
 def human_delay(min_sec=2, max_sec=4):
@@ -16,48 +31,149 @@ def human_delay(min_sec=2, max_sec=4):
 
 
 # ============================================================
-# CAPTCHA DETECTION
+# CAPTCHA / BLOCK DETECTION
 # ============================================================
 
 def captcha_detected(page):
-    """Check whether Amazon is displaying a CAPTCHA."""
-    return page.locator(
-        "form[action='/errors/validateCaptcha']"
-    ).count() > 0
+    """
+    Detect common Amazon CAPTCHA / verification pages.
+    """
+
+    try:
+        captcha_form = page.locator(
+            "form[action='/errors/validateCaptcha']"
+        )
+
+        if captcha_form.count() > 0:
+            return True
+
+        captcha_text = page.locator(
+            "text=Enter the characters you see below"
+        )
+
+        if captcha_text.count() > 0:
+            return True
+
+        verify_text = page.locator(
+            "text=Sorry, we just need to make sure you're not a robot"
+        )
+
+        if verify_text.count() > 0:
+            return True
+
+        return False
+
+    except Exception:
+        return False
+
+
+def page_is_blocked(page):
+    """
+    Detect common Amazon blocking / challenge pages.
+    """
+
+    try:
+        current_url = page.url.lower()
+
+        if "captcha" in current_url:
+            return True
+
+        if "errors/validatecaptcha" in current_url:
+            return True
+
+        if captcha_detected(page):
+            return True
+
+        return False
+
+    except Exception:
+        return False
+
+
+# ============================================================
+# BROWSER LAUNCH
+# ============================================================
+
+def launch_amazon_browser(playwright):
+    """
+    Launch a persistent Chromium browser.
+
+    Local:
+        headed browser
+
+    Render:
+        headless browser
+    """
+
+    user_data_dir = os.path.join(
+        os.getcwd(),
+        "amazon_session"
+    )
+
+    print("\n========================================")
+    print("AMAZON BROWSER CONFIGURATION")
+    print("========================================")
+    print(f"Render environment : {IS_RENDER}")
+    print(f"Headless mode      : {IS_RENDER}")
+    print(f"User data directory: {user_data_dir}")
+    print("========================================")
+
+    browser = playwright.chromium.launch_persistent_context(
+        user_data_dir=user_data_dir,
+        headless=IS_RENDER,
+        viewport={
+            "width": BROWSER_WIDTH,
+            "height": BROWSER_HEIGHT
+        },
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage"
+        ]
+    )
+
+    return browser
+
+
+# ============================================================
+# STEALTH
+# ============================================================
+
+def apply_stealth(page):
+    """
+    Apply Playwright stealth configuration.
+    """
+
+    try:
+        stealth = Stealth()
+        stealth.apply_stealth_sync(page)
+
+        print("Playwright stealth applied.")
+
+    except Exception as e:
+
+        print(
+            f"Warning: Could not apply stealth: "
+            f"{type(e).__name__}: {e}"
+        )
 
 
 # ============================================================
 # CATEGORY / MULTIPLE PRODUCT SCRAPER
 # ============================================================
 
-def advanced_amazon_scraper(search_keyword, target_count=20):
+def advanced_amazon_scraper(
+    search_keyword,
+    target_count=20
+):
 
     results = []
 
-    # Persistent browser session
-    user_data_dir = os.path.join(
-        os.getcwd(),
-        "amazon_session"
-    )
-
     with sync_playwright() as p:
 
-        print("\nLaunching persistent browser session...")
+        print("\nLaunching Amazon category browser...")
 
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=False,
-            viewport={
-                "width": 1366,
-                "height": 768
-            },
-            args=[
-                "--disable-blink-features=AutomationControlled"
-            ]
-        )
-
-        # Apply stealth
-        stealth = Stealth()
+        browser = launch_amazon_browser(p)
 
         page = (
             browser.pages[0]
@@ -65,55 +181,78 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
             else browser.new_page()
         )
 
-        stealth.apply_stealth_sync(page)
+        apply_stealth(page)
 
-        # Initial search URL
         search_url = (
-            "https://www.amazon.in/s?k="
+            f"{AMAZON_URL}/s?k="
             + search_keyword.replace(" ", "+")
         )
 
         while len(results) < target_count:
 
-            print("\n--- Loading Search Page ---")
+            print("\n----------------------------------------")
+            print("Loading Amazon search page")
+            print("----------------------------------------")
+            print(f"Keyword: {search_keyword}")
+            print(f"URL: {search_url}")
 
             try:
 
                 page.goto(
                     search_url,
                     wait_until="domcontentloaded",
-                    timeout=60000
+                    timeout=PAGE_TIMEOUT
                 )
 
                 human_delay(2, 3)
 
             except Exception as e:
 
-                print(
-                    f"Error loading search page: "
-                    f"{str(e)[:100]}"
-                )
+                print("\nAMAZON SEARCH PAGE ERROR")
+                print(f"Error type   : {type(e).__name__}")
+                print(f"Error message: {e}")
 
                 continue
 
-            # CAPTCHA detection
-            if captcha_detected(page):
+            print(f"Loaded URL: {page.url}")
 
-                print("\nCAPTCHA DETECTED!")
+            # CAPTCHA / block
+            if page_is_blocked(page):
 
-                input(
-                    "Solve the CAPTCHA in the browser "
-                    "and press ENTER..."
-                )
+                print("\n========================================")
+                print("AMAZON CAPTCHA / BLOCK DETECTED")
+                print("========================================")
 
-                continue
+                if IS_RENDER:
+
+                    print(
+                        "Running on Render."
+                    )
+
+                    print(
+                        "Manual CAPTCHA solving is "
+                        "not available."
+                    )
+
+                    browser.close()
+
+                    return results
+
+                else:
+
+                    input(
+                        "\nSolve the CAPTCHA in the browser "
+                        "and press ENTER to continue..."
+                    )
+
+                    continue
 
             # ------------------------------------------------
             # SCROLLING
             # ------------------------------------------------
 
             print(
-                "Scrolling to trigger lazy-loading..."
+                "Scrolling to trigger lazy loading..."
             )
 
             for _ in range(4):
@@ -123,29 +262,33 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                 human_delay(0.5, 1.5)
 
             # ------------------------------------------------
-            # EXTRACT PRODUCT LINKS
+            # PRODUCT LINKS
             # ------------------------------------------------
 
             print(
                 "Extracting product URLs..."
             )
 
-            product_links = page.evaluate(
-                """
-                () => {
+            try:
 
-                    let links = [];
+                product_links = page.evaluate(
+                    """
+                    () => {
 
-                    document
-                        .querySelectorAll('div[data-asin]')
-                        .forEach(item => {
+                        const links = [];
 
-                            let asin =
-                                item.getAttribute('data-asin');
+                        document
+                            .querySelectorAll('div[data-asin]')
+                            .forEach(item => {
 
-                            if (asin) {
+                                const asin =
+                                    item.getAttribute('data-asin');
 
-                                let aTag =
+                                if (!asin) {
+                                    return;
+                                }
+
+                                const aTag =
                                     item.querySelector(
                                         'a.a-link-normal'
                                     );
@@ -162,19 +305,33 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
 
                                 }
 
-                            }
+                            });
 
-                        });
+                        return [...new Set(links)];
 
-                    return [...new Set(links)];
-                }
-                """
-            )
+                    }
+                    """
+                )
+
+            except Exception as e:
+
+                print(
+                    "\nERROR EXTRACTING PRODUCT LINKS"
+                )
+
+                print(
+                    f"Error type   : {type(e).__name__}"
+                )
+
+                print(
+                    f"Error message: {e}"
+                )
+
+                continue
 
             print(
                 f"Successfully found "
-                f"{len(product_links)} unique "
-                f"product links."
+                f"{len(product_links)} unique product links."
             )
 
             if len(product_links) == 0:
@@ -182,6 +339,17 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                 print(
                     "\nNo product links found."
                 )
+
+                if IS_RENDER:
+
+                    print(
+                        "Render environment: "
+                        "cannot manually inspect browser."
+                    )
+
+                    browser.close()
+
+                    return results
 
                 input(
                     "Inspect the browser and press ENTER "
@@ -199,35 +367,45 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                 if len(results) >= target_count:
                     break
 
-                print(
-                    f"\nNavigating to: "
-                    f"{link[-50:]}..."
-                )
+                print("\n----------------------------------------")
+                print("Opening product")
+                print("----------------------------------------")
+                print(link)
 
                 try:
 
                     page.goto(
                         link,
                         wait_until="domcontentloaded",
-                        timeout=60000
+                        timeout=PAGE_TIMEOUT
                     )
 
                     human_delay(2, 4)
 
-                    if captcha_detected(page):
+                    if page_is_blocked(page):
 
                         print(
-                            "CAPTCHA DETECTED "
-                            "on product page!"
+                            "CAPTCHA / block detected "
+                            "on product page."
                         )
 
+                        if IS_RENDER:
+
+                            print(
+                                "Cannot manually solve CAPTCHA "
+                                "on Render."
+                            )
+
+                            browser.close()
+
+                            return results
+
                         input(
-                            "Solve CAPTCHA and "
-                            "press ENTER..."
+                            "Solve CAPTCHA and press ENTER..."
                         )
 
                     # ------------------------------------------------
-                    # PRODUCT TITLE
+                    # TITLE
                     # ------------------------------------------------
 
                     title = "N/A"
@@ -246,7 +424,7 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                         )
 
                     # ------------------------------------------------
-                    # PRODUCT PRICE
+                    # PRICE
                     # ------------------------------------------------
 
                     price = "N/A"
@@ -264,14 +442,15 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
 
                     for selector in visible_selectors:
 
-                        loc = page.locator(
+                        locator = page.locator(
                             selector
                         )
 
-                        if loc.count() > 0:
+                        if locator.count() > 0:
 
                             extracted = (
-                                loc.first
+                                locator
+                                .first
                                 .inner_text()
                                 .strip()
                             )
@@ -299,14 +478,15 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
 
                         for selector in hidden_selectors:
 
-                            loc = page.locator(
+                            locator = page.locator(
                                 selector
                             )
 
-                            if loc.count() > 0:
+                            if locator.count() > 0:
 
                                 extracted = (
-                                    loc.first
+                                    locator
+                                    .first
                                     .text_content()
                                 )
 
@@ -323,7 +503,7 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                                         break
 
                     # ------------------------------------------------
-                    # SAVE RESULT
+                    # SAVE
                     # ------------------------------------------------
 
                     results.append(
@@ -336,16 +516,29 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                     print(
                         f"[{len(results)}/"
                         f"{target_count}] "
-                        f"Saved: "
-                        f"{title[:45]}... | "
-                        f"{price}"
+                        f"Saved:"
+                    )
+
+                    print(
+                        f"Title : {title}"
+                    )
+
+                    print(
+                        f"Price : {price}"
                     )
 
                 except Exception as e:
 
                     print(
-                        f"Error scraping product: "
-                        f"{str(e)[:100]}..."
+                        "\nERROR SCRAPING AMAZON PRODUCT"
+                    )
+
+                    print(
+                        f"Error type   : {type(e).__name__}"
+                    )
+
+                    print(
+                        f"Error message: {e}"
                     )
 
                     continue
@@ -356,13 +549,19 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
 
             if len(results) < target_count:
 
-                next_button = page.locator(
-                    ".s-pagination-next"
-                )
+                try:
 
-                button_class = ""
+                    next_button = page.locator(
+                        ".s-pagination-next"
+                    )
 
-                if next_button.count() > 0:
+                    if next_button.count() == 0:
+
+                        print(
+                            "\nNo next page found."
+                        )
+
+                        break
 
                     button_class = (
                         next_button
@@ -371,12 +570,17 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                         or ""
                     )
 
-                if (
-                    next_button.count() > 0
-                    and
-                    "s-pagination-disabled"
-                    not in button_class
-                ):
+                    if (
+                        "s-pagination-disabled"
+                        in button_class
+                    ):
+
+                        print(
+                            "\nReached the end "
+                            "of Amazon search results."
+                        )
+
+                        break
 
                     next_path = (
                         next_button
@@ -384,36 +588,41 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
                         .get_attribute("href")
                     )
 
-                    if next_path:
-
-                        if next_path.startswith("http"):
-
-                            search_url = next_path
-
-                        else:
-
-                            search_url = (
-                                "https://www.amazon.in"
-                                + next_path
-                            )
+                    if not next_path:
 
                         print(
-                            "\nMoving to next page..."
-                        )
-
-                    else:
-
-                        print(
-                            "\nNo next page found."
+                            "\nNext page has no URL."
                         )
 
                         break
 
-                else:
+                    if next_path.startswith("http"):
+
+                        search_url = next_path
+
+                    else:
+
+                        search_url = (
+                            AMAZON_URL
+                            + next_path
+                        )
 
                     print(
-                        "\nReached the end "
-                        "of search results."
+                        "\nMoving to next Amazon page..."
+                    )
+
+                except Exception as e:
+
+                    print(
+                        "\nPAGINATION ERROR"
+                    )
+
+                    print(
+                        f"Error type   : {type(e).__name__}"
+                    )
+
+                    print(
+                        f"Error message: {e}"
                     )
 
                     break
@@ -430,8 +639,13 @@ def advanced_amazon_scraper(search_keyword, target_count=20):
 def scrape_competitor_price(product_name):
 
     """
-    Search Amazon for a specific product and return
-    the first related product and its current price.
+    Search Amazon for a specific product.
+
+    Current deployment version intentionally uses
+    the first Amazon search result.
+
+    Exact product matching can be improved separately
+    after Playwright deployment is confirmed.
     """
 
     result = {
@@ -440,106 +654,99 @@ def scrape_competitor_price(product_name):
         "Price": "N/A"
     }
 
-    # Persistent browser session
-    user_data_dir = os.path.join(
-        os.getcwd(),
-        "amazon_session"
-    )
-
     with sync_playwright() as p:
 
-        print(
-            "\nLaunching Amazon browser..."
-        )
+        print("\n========================================")
+        print("AMAZON COMPETITOR SCRAPER")
+        print("========================================")
 
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # Local machine  -> visible browser
-        # Render server   -> headless browser
-        # ----------------------------------------------------
-
-        is_render = os.getenv("RENDER") is not None
-
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=is_render,
-            viewport={
-                "width": 1366,
-                "height": 768
-            },
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage"
-            ]
-        )
-
-        # Apply stealth
-        stealth = Stealth()
-
-        page = (
-            browser.pages[0]
-            if browser.pages
-            else browser.new_page()
-        )
-
-        stealth.apply_stealth_sync(page)
+        browser = None
 
         try:
+
+            browser = launch_amazon_browser(p)
+
+            page = (
+                browser.pages[0]
+                if browser.pages
+                else browser.new_page()
+            )
+
+            apply_stealth(page)
 
             # ------------------------------------------------
             # OPEN AMAZON
             # ------------------------------------------------
 
-            print(
-                "\nOpening Amazon India..."
-            )
+            print("\nOpening Amazon India...")
 
             page.goto(
-                "https://www.amazon.in",
+                AMAZON_URL,
                 wait_until="domcontentloaded",
-                timeout=60000
+                timeout=PAGE_TIMEOUT
             )
 
             human_delay(2, 3)
 
-            # CAPTCHA
-            if captcha_detected(page):
+            print(
+                f"Amazon URL after opening: {page.url}"
+            )
 
-                print(
-                    "\nCAPTCHA DETECTED!"
-                )
+            # ------------------------------------------------
+            # CAPTCHA / BLOCK
+            # ------------------------------------------------
 
-                # CAPTCHA interaction is only possible
-                # when running locally with a visible browser.
-                if not is_render:
+            if page_is_blocked(page):
 
-                    input(
-                        "Solve the CAPTCHA in the browser "
-                        "and press ENTER..."
-                    )
+                print("\n========================================")
+                print("AMAZON CAPTCHA / BLOCK DETECTED")
+                print("========================================")
 
-                else:
+                if IS_RENDER:
 
                     print(
-                        "CAPTCHA detected on Render. "
-                        "Cannot perform manual CAPTCHA solving."
+                        "Render environment detected."
+                    )
+
+                    print(
+                        "Returning N/A because CAPTCHA "
+                        "cannot be manually solved."
                     )
 
                     return result
 
+                input(
+                    "Solve the CAPTCHA in the browser "
+                    "and press ENTER..."
+                )
+
             # ------------------------------------------------
-            # SEARCH PRODUCT
+            # SEARCH
             # ------------------------------------------------
 
             print(
-                f"\nSearching Amazon for: "
+                f"\nSearching Amazon for:"
+            )
+
+            print(
                 f"{product_name}"
             )
 
             search_box = page.locator(
                 "#twotabsearchtextbox"
             )
+
+            if search_box.count() == 0:
+
+                print(
+                    "\nAmazon search box was not found."
+                )
+
+                print(
+                    f"Current URL: {page.url}"
+                )
+
+                return result
 
             search_box.fill(
                 product_name
@@ -551,57 +758,78 @@ def scrape_competitor_price(product_name):
 
             page.wait_for_load_state(
                 "domcontentloaded",
-                timeout=60000
+                timeout=PAGE_TIMEOUT
             )
 
             human_delay(2, 3)
 
-            # CAPTCHA after search
-            if captcha_detected(page):
+            print(
+                f"\nAmazon search URL:"
+            )
 
-                print(
-                    "\nCAPTCHA DETECTED "
-                    "after searching!"
-                )
+            print(
+                page.url
+            )
 
-                if not is_render:
+            # ------------------------------------------------
+            # CAPTCHA AFTER SEARCH
+            # ------------------------------------------------
 
-                    input(
-                        "Solve the CAPTCHA and "
-                        "press ENTER..."
-                    )
+            if page_is_blocked(page):
 
-                else:
+                print("\n========================================")
+                print("CAPTCHA / BLOCK AFTER AMAZON SEARCH")
+                print("========================================")
+
+                if IS_RENDER:
 
                     print(
-                        "CAPTCHA detected on Render "
-                        "after search."
+                        "Render environment detected."
+                    )
+
+                    print(
+                        "Cannot manually solve CAPTCHA."
                     )
 
                     return result
+
+                input(
+                    "Solve the CAPTCHA and press ENTER..."
+                )
 
             # ------------------------------------------------
             # FIND SEARCH RESULTS
             # ------------------------------------------------
 
+            print(
+                "\nSearching for Amazon product cards..."
+            )
+
             products = page.locator(
                 'div[data-component-type="s-search-result"]'
             )
 
-            if products.count() == 0:
+            product_count = products.count()
+
+            print(
+                f"Amazon result cards found: "
+                f"{product_count}"
+            )
+
+            if product_count == 0:
 
                 print(
                     "\nNo Amazon search results found."
                 )
 
+                print(
+                    f"Current URL: {page.url}"
+                )
+
                 return result
 
             # ------------------------------------------------
-            # CURRENT MATCHING LOGIC
-            # ------------------------------------------------
-            # We are intentionally keeping the current
-            # first-result behavior for this deployment test.
-            # Product matching will be improved separately.
+            # FIRST RESULT
             # ------------------------------------------------
 
             first_product = products.first
@@ -625,8 +853,15 @@ def scrape_competitor_price(product_name):
 
                 result["Amazon Product"] = title
 
+            else:
+
+                print(
+                    "\nAmazon product title selector "
+                    "did not find a title."
+                )
+
             # ------------------------------------------------
-            # PRODUCT PRICE
+            # PRICE
             # ------------------------------------------------
 
             price_locator = first_product.locator(
@@ -647,7 +882,6 @@ def scrape_competitor_price(product_name):
 
             else:
 
-                # Fallback to visible whole price
                 whole_price = first_product.locator(
                     ".a-price-whole"
                 ).first
@@ -667,20 +901,12 @@ def scrape_competitor_price(product_name):
                         )
 
             # ------------------------------------------------
-            # DISPLAY RESULT
+            # FINAL RESULT
             # ------------------------------------------------
 
-            print(
-                "\n-----------------------------"
-            )
-
-            print(
-                "Amazon Competitor Price"
-            )
-
-            print(
-                "-----------------------------"
-            )
+            print("\n========================================")
+            print("AMAZON COMPETITOR RESULT")
+            print("========================================")
 
             print(
                 f"Requested Product : "
@@ -698,27 +924,43 @@ def scrape_competitor_price(product_name):
             )
 
             print(
-                "-----------------------------"
+                "========================================"
             )
 
             return result
 
         except Exception as e:
 
+            print("\n========================================")
+            print("AMAZON SCRAPER ERROR")
+            print("========================================")
+
             print(
-                "\nError while searching "
-                "for product:"
+                f"Requested product: {product_name}"
             )
 
             print(
-                str(e)
+                f"Error type: {type(e).__name__}"
+            )
+
+            print(
+                f"Error message: {e}"
+            )
+
+            print(
+                "========================================"
             )
 
             return result
 
         finally:
 
-            browser.close()
+            if browser is not None:
+
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
 
 # ============================================================
@@ -729,9 +971,6 @@ def save_category_results(data, filename):
 
     """
     Save category scraper results to CSV.
-
-    This is retained because the original category
-    scraper already used CSV output.
     """
 
     if not filename.endswith(".csv"):
@@ -782,6 +1021,10 @@ if __name__ == "__main__":
     )
 
     print(
+        f"\nRender environment: {IS_RENDER}"
+    )
+
+    print(
         "\nChoose scraping mode:"
     )
 
@@ -798,7 +1041,7 @@ if __name__ == "__main__":
     ).strip()
 
     # ========================================================
-    # MODE 1: CATEGORY SCRAPING
+    # MODE 1
     # ========================================================
 
     if choice == "1":
@@ -823,7 +1066,7 @@ if __name__ == "__main__":
 
         raw_count = input(
             "Enter the number of products "
-            "to scrape (e.g., 20): "
+            "(e.g., 20): "
         ).strip()
 
         try:
@@ -833,21 +1076,20 @@ if __name__ == "__main__":
             )
 
             if target_count <= 0:
-
                 raise ValueError
 
         except ValueError:
 
             print(
-                "Invalid number entered. "
+                "Invalid number. "
                 "Defaulting to 20."
             )
 
             target_count = 20
 
         filename = input(
-            "Enter the name of the output CSV "
-            "file (e.g., data.csv): "
+            "Enter CSV filename "
+            "(e.g., data.csv): "
         ).strip()
 
         if not filename:
@@ -891,7 +1133,7 @@ if __name__ == "__main__":
             )
 
     # ========================================================
-    # MODE 2: SPECIFIC PRODUCT
+    # MODE 2
     # ========================================================
 
     elif choice == "2":
@@ -902,7 +1144,7 @@ if __name__ == "__main__":
 
         product_name = input(
             "Enter the product name "
-            "(e.g., Nike Revolution 7): "
+            "(e.g., Oppo Reno 13 5G): "
         ).strip()
 
         if not product_name:
@@ -913,20 +1155,18 @@ if __name__ == "__main__":
 
         else:
 
-            # The function itself prints the result
-            # and returns the data for future backend use.
             scrape_competitor_price(
                 product_name
             )
 
     # ========================================================
-    # INVALID OPTION
+    # INVALID
     # ========================================================
 
     else:
 
         print(
-            "\nInvalid choice."
+            "\nInvalid option."
         )
 
         print(
