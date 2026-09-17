@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.amazon_scraper.scraper import advanced_amazon_scraper
+from app.services.amazon_scraper.scraper import scrape_competitor_price
 from app.services.flipkart_scraper.scraper import scrape_flipkart_product
 
 
@@ -36,9 +36,17 @@ def compare_competitor_prices(
             detail="Product name cannot be empty"
         )
 
-    # --------------------------------------------------------
+    print("\n")
+    print("=" * 60)
+    print("COMPETITOR PRICING REQUEST")
+    print("=" * 60)
+    print(f"Requested product: {product_name}")
+    print("=" * 60)
+
+
+    # ========================================================
     # AMAZON
-    # --------------------------------------------------------
+    # ========================================================
 
     amazon_result = {
         "Product": "N/A",
@@ -47,36 +55,35 @@ def compare_competitor_prices(
 
     try:
 
-        amazon_data = advanced_amazon_scraper(
-            product_name,
-            target_count=1
+        print("\nStarting Amazon competitor scraper...")
+
+        amazon_data = scrape_competitor_price(
+            product_name
         )
 
-        if amazon_data:
+        print("\nAmazon scraper returned:")
+        print(amazon_data)
 
-            first_product = amazon_data[0]
-
-            amazon_result = {
-                "Product": first_product.get(
-                    "Title",
-                    "N/A"
-                ),
-                "Price": first_product.get(
-                    "Price",
-                    "N/A"
-                )
-            }
+        amazon_result = {
+            "Product": amazon_data.get(
+                "Amazon Product",
+                "N/A"
+            ),
+            "Price": amazon_data.get(
+                "Price",
+                "N/A"
+            )
+        }
 
     except Exception as e:
 
-        print(
-            f"Amazon scraping error: {e}"
-        )
+        print("\nAmazon scraping error:")
+        print(f"{type(e).__name__}: {e}")
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # FLIPKART
-    # --------------------------------------------------------
+    # ========================================================
 
     flipkart_result = {
         "Product": "N/A",
@@ -85,9 +92,14 @@ def compare_competitor_prices(
 
     try:
 
+        print("\nStarting Flipkart competitor scraper...")
+
         flipkart_data = scrape_flipkart_product(
             product_name
         )
+
+        print("\nFlipkart scraper returned:")
+        print(flipkart_data)
 
         flipkart_result = {
             "Product": flipkart_data.get(
@@ -102,16 +114,15 @@ def compare_competitor_prices(
 
     except Exception as e:
 
-        print(
-            f"Flipkart scraping error: {e}"
-        )
+        print("\nFlipkart scraping error:")
+        print(f"{type(e).__name__}: {e}")
 
 
-    # --------------------------------------------------------
-    # RETURN COMBINED RESULT
-    # --------------------------------------------------------
+    # ========================================================
+    # FINAL RESPONSE
+    # ========================================================
 
-    return {
+    final_result = {
         "requested_product": product_name,
 
         "competitors": [
@@ -130,3 +141,12 @@ def compare_competitor_prices(
 
         ]
     }
+
+    print("\n")
+    print("=" * 60)
+    print("COMPETITOR PRICING FINAL RESULT")
+    print("=" * 60)
+    print(final_result)
+    print("=" * 60)
+
+    return final_result
