@@ -452,15 +452,25 @@ def scrape_competitor_price(product_name):
             "\nLaunching Amazon browser..."
         )
 
+        # ----------------------------------------------------
+        # IMPORTANT:
+        # Local machine  -> visible browser
+        # Render server   -> headless browser
+        # ----------------------------------------------------
+
+        is_render = os.getenv("RENDER") is not None
+
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
-            headless=False,
+            headless=is_render,
             viewport={
                 "width": 1366,
                 "height": 768
             },
             args=[
-                "--disable-blink-features=AutomationControlled"
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage"
             ]
         )
 
@@ -500,10 +510,23 @@ def scrape_competitor_price(product_name):
                     "\nCAPTCHA DETECTED!"
                 )
 
-                input(
-                    "Solve the CAPTCHA in the browser "
-                    "and press ENTER..."
-                )
+                # CAPTCHA interaction is only possible
+                # when running locally with a visible browser.
+                if not is_render:
+
+                    input(
+                        "Solve the CAPTCHA in the browser "
+                        "and press ENTER..."
+                    )
+
+                else:
+
+                    print(
+                        "CAPTCHA detected on Render. "
+                        "Cannot perform manual CAPTCHA solving."
+                    )
+
+                    return result
 
             # ------------------------------------------------
             # SEARCH PRODUCT
@@ -541,10 +564,21 @@ def scrape_competitor_price(product_name):
                     "after searching!"
                 )
 
-                input(
-                    "Solve the CAPTCHA and "
-                    "press ENTER..."
-                )
+                if not is_render:
+
+                    input(
+                        "Solve the CAPTCHA and "
+                        "press ENTER..."
+                    )
+
+                else:
+
+                    print(
+                        "CAPTCHA detected on Render "
+                        "after search."
+                    )
+
+                    return result
 
             # ------------------------------------------------
             # FIND SEARCH RESULTS
@@ -562,7 +596,14 @@ def scrape_competitor_price(product_name):
 
                 return result
 
-            # Take the first related product
+            # ------------------------------------------------
+            # CURRENT MATCHING LOGIC
+            # ------------------------------------------------
+            # We are intentionally keeping the current
+            # first-result behavior for this deployment test.
+            # Product matching will be improved separately.
+            # ------------------------------------------------
+
             first_product = products.first
 
             # ------------------------------------------------
