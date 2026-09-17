@@ -39,11 +39,7 @@ PROJECT_ROOT = CURRENT_FILE.parents[4]
 # PRODUCTION MODEL DIRECTORY
 # ============================================================
 
-MODEL_DIR = (
-    PROJECT_ROOT
-    / "models"
-    / "demand_forecasting"
-)
+MODEL_DIR = CURRENT_FILE.parent
 
 
 # ============================================================
@@ -52,7 +48,7 @@ MODEL_DIR = (
 
 MODEL_PATH = (
     MODEL_DIR
-    / "demand_forecasting_model.joblib"
+    / "xgb_demand_model.joblib"
 )
 
 
