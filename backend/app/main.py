@@ -24,6 +24,7 @@ from app.api.profitability_analytics import router as profitability_router
 from app.api.business_intelligence import router as business_intelligence_router
 from app.api.playwright_test import router as playwright_test_router
 from app.api.apify_test import router as apify_test_router
+from app.api.flipkart_apify_test import router as flipkart_apify_test_router
 
 app = FastAPI(
     title="PricePilot AI API",
@@ -68,3 +69,4 @@ app.include_router(playwright_test_router)
 app.include_router(profitability_router)
 app.include_router(business_intelligence_router)
 app.include_router(apify_test_router)
+app.include_router(flipkart_apify_test_router)
