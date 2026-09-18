@@ -631,9 +631,10 @@ function Forecast() {
         // ======================================================
 
         const productionResponse =
-          await API.get(
-            "/demand-forecast/forecast"
-          );
+  await API.post(
+    "/demand-forecast/forecast",
+    payload
+  );
 
 
         const predictionData =

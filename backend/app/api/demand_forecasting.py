@@ -7,8 +7,10 @@ from sqlalchemy import func, extract
 from pathlib import Path
 import json
 
-from app.ml.demand_forecasting.predict import predict_demand
-
+from app.ml.demand_forecasting.predict import (
+    predict_demand,
+    generate_demand_forecast
+)
 from app.database.database import get_db
 
 from app.models.products import Product
@@ -399,103 +401,166 @@ def predict_demand_index(
 # PRODUCTION FORECAST SUMMARY
 # ============================================================
 
-@router.get(
+@router.post(
     "/forecast",
     response_model=DemandForecastSummaryResponse
 )
-def get_demand_forecast():
-
+def get_demand_forecast(
+    data: DemandForecastRequest
+):
     try:
+        input_data = data.model_dump()
 
-        if not FORECAST_SUMMARY_PATH.exists():
+        forecast_result = generate_demand_forecast(
+            input_data
+        )
 
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    "Forecast summary not found. "
-                    "Run scripts/demand_forecaster.py first."
+        current_demand = float(
+            forecast_result["current_demand"]
+        )
+
+        current_price = float(
+            input_data["current_price"]
+        )
+
+        base_date = __import__(
+            "pandas"
+        ).Timestamp(
+            year=int(input_data["year"]),
+            month=int(input_data["month"]),
+            day=int(input_data["day"])
+        )
+
+        horizons = [
+            ("7_days", 7),
+            ("14_days", 14),
+            ("30_days", 30),
+            ("3_months", 90),
+            ("6_months", 180),
+            ("12_months", 365)
+        ]
+
+        result = {}
+
+        for horizon_name, forecast_days in horizons:
+
+            predicted_daily_demand = float(
+                forecast_result[
+                    "short_term"
+                    if forecast_days <= 30
+                    else "medium_term"
+                    if forecast_days <= 180
+                    else "long_term"
+                ][
+                    horizon_name
+                ]
+            )
+
+            forecast_start = (
+                base_date
+                + __import__("pandas").Timedelta(days=1)
+            )
+
+            forecast_end = (
+                base_date
+                + __import__("pandas").Timedelta(
+                    days=forecast_days
                 )
             )
 
-        with open(
-            FORECAST_SUMMARY_PATH,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            forecast_data = json.load(file)
-
-        required_horizons = [
-            "7_days",
-            "14_days",
-            "30_days",
-            "3_months",
-            "6_months",
-            "12_months"
-        ]
-
-        missing_horizons = [
-            horizon
-            for horizon in required_horizons
-            if horizon not in forecast_data
-        ]
-
-        if missing_horizons:
-
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Forecast summary is incomplete. "
-                    f"Missing horizons: {missing_horizons}"
-                )
+            total_demand = (
+                predicted_daily_demand
+                * forecast_days
             )
+
+            total_revenue = (
+                total_demand
+                * current_price
+            )
+
+            if current_demand != 0:
+
+                trend_change = (
+                    (
+                        predicted_daily_demand
+                        - current_demand
+                    )
+                    / abs(current_demand)
+                ) * 100
+
+            else:
+                trend_change = 0.0
+
+            if trend_change >= 5:
+                demand_trend = "INCREASING"
+
+            elif trend_change <= -5:
+                demand_trend = "DECREASING"
+
+            else:
+                demand_trend = "STABLE"
+
+            result[horizon_name] = {
+                "forecast_horizon": horizon_name,
+                "forecast_start":
+                    forecast_start.strftime("%Y-%m-%d"),
+                "forecast_end":
+                    forecast_end.strftime("%Y-%m-%d"),
+                "forecast_days":
+                    forecast_days,
+
+                "production_model":
+                    "XGBoost Demand Forecasting Model",
+
+                "total_predicted_demand":
+                    round(total_demand, 2),
+
+                "average_daily_demand":
+                    round(predicted_daily_demand, 2),
+
+                "maximum_daily_demand":
+                    round(predicted_daily_demand, 2),
+
+                "minimum_daily_demand":
+                    round(predicted_daily_demand, 2),
+
+                "total_predicted_revenue":
+                    round(total_revenue, 2),
+
+                "demand_trend":
+                    demand_trend,
+
+                "trend_change_percent":
+                    round(trend_change, 2),
+
+                "confidence_score":
+                    round(
+                        float(
+                            forecast_result[
+                                "confidence_score"
+                            ]
+                        ),
+                        2
+                    )
+            }
 
         return {
-
-            "seven_days":
-                forecast_data["7_days"],
-
-            "fourteen_days":
-                forecast_data["14_days"],
-
-            "thirty_days":
-                forecast_data["30_days"],
-
-            "three_months":
-                forecast_data["3_months"],
-
-            "six_months":
-                forecast_data["6_months"],
-
-            "twelve_months":
-                forecast_data["12_months"]
-
+            "seven_days": result["7_days"],
+            "fourteen_days": result["14_days"],
+            "thirty_days": result["30_days"],
+            "three_months": result["3_months"],
+            "six_months": result["6_months"],
+            "twelve_months": result["12_months"]
         }
-
-    except HTTPException:
-        raise
-
-    except json.JSONDecodeError as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Forecast summary JSON is invalid: "
-                f"{str(e)}"
-            )
-        )
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "Failed to load demand forecast summary: "
-                f"{str(e)}"
+                f"Demand forecast failed: {str(e)}"
             )
         )
-
-
 # ============================================================
 # SEASONAL TREND
 #
