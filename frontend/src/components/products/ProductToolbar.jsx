@@ -18,23 +18,34 @@ function ProductToolbar({
   isAdmin,
 }) {
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+    <div
+      className="
+        flex
+        w-full
+        flex-col
+        gap-3
+        lg:flex-row
+        lg:items-center
+      "
+    >
 
       {/* =====================================================
           SEARCH
       ====================================================== */}
 
-      <div className="relative flex-1">
+      <div className="relative w-full min-w-0 flex-1">
 
         <Search
           size={16}
           className="
+            pointer-events-none
             absolute
-            left-4
+            left-3.5
             top-1/2
             -translate-y-1/2
             text-lime-300/70
             drop-shadow-[0_0_5px_rgba(163,230,53,0.5)]
+            sm:left-4
           "
         />
 
@@ -50,8 +61,8 @@ function ProductToolbar({
             border-lime-300/20
             bg-[#0B1220]
             py-3
-            pl-10
-            pr-4
+            pl-9
+            pr-3
             text-sm
             text-white
             placeholder:text-white/30
@@ -61,6 +72,8 @@ function ProductToolbar({
             duration-200
             focus:border-lime-300/60
             focus:shadow-[0_0_8px_rgba(163,230,53,0.35),0_0_18px_rgba(163,230,53,0.10)]
+            sm:pl-10
+            sm:pr-4
           "
         />
 
@@ -71,18 +84,19 @@ function ProductToolbar({
           CATEGORY
       ====================================================== */}
 
-      <div className="relative w-full lg:w-48">
+      <div className="relative w-full lg:w-48 lg:shrink-0">
 
         <Filter
           size={15}
           className="
             pointer-events-none
             absolute
-            left-4
+            left-3.5
             top-1/2
             -translate-y-1/2
             text-lime-300/65
             drop-shadow-[0_0_5px_rgba(163,230,53,0.4)]
+            sm:left-4
           "
         />
 
@@ -97,8 +111,8 @@ function ProductToolbar({
             border-lime-300/20
             bg-[#0B1220]
             py-3
-            pl-10
-            pr-4
+            pl-9
+            pr-3
             text-sm
             text-white/70
             outline-none
@@ -107,6 +121,8 @@ function ProductToolbar({
             duration-200
             focus:border-lime-300/60
             focus:shadow-[0_0_8px_rgba(163,230,53,0.35),0_0_18px_rgba(163,230,53,0.10)]
+            sm:pl-10
+            sm:pr-4
           "
         >
 
@@ -151,18 +167,19 @@ function ProductToolbar({
           SORT
       ====================================================== */}
 
-      <div className="relative w-full lg:w-44">
+      <div className="relative w-full lg:w-44 lg:shrink-0">
 
         <ArrowUpDown
           size={15}
           className="
             pointer-events-none
             absolute
-            left-4
+            left-3.5
             top-1/2
             -translate-y-1/2
             text-lime-300/65
             drop-shadow-[0_0_5px_rgba(163,230,53,0.4)]
+            sm:left-4
           "
         />
 
@@ -177,8 +194,8 @@ function ProductToolbar({
             border-lime-300/20
             bg-[#0B1220]
             py-3
-            pl-10
-            pr-4
+            pl-9
+            pr-3
             text-sm
             text-white/70
             outline-none
@@ -187,6 +204,8 @@ function ProductToolbar({
             duration-200
             focus:border-lime-300/60
             focus:shadow-[0_0_8px_rgba(163,230,53,0.35),0_0_18px_rgba(163,230,53,0.10)]
+            sm:pl-10
+            sm:pr-4
           "
         >
 
@@ -218,6 +237,7 @@ function ProductToolbar({
       <div
         className="
           flex
+          w-full
           items-center
           rounded-xl
           border
@@ -225,6 +245,8 @@ function ProductToolbar({
           bg-[#0B1220]
           p-1
           shadow-[0_0_7px_rgba(163,230,53,0.05)]
+          lg:w-auto
+          lg:shrink-0
         "
       >
 
@@ -232,6 +254,7 @@ function ProductToolbar({
           type="button"
           onClick={() => setOrder("asc")}
           className={`
+            flex-1
             rounded-lg
             px-3
             py-2
@@ -240,6 +263,8 @@ function ProductToolbar({
             tracking-wider
             transition-all
             duration-200
+            sm:px-4
+            lg:flex-none
             ${
               order === "asc"
                 ? `
@@ -261,6 +286,7 @@ function ProductToolbar({
           type="button"
           onClick={() => setOrder("desc")}
           className={`
+            flex-1
             rounded-lg
             px-3
             py-2
@@ -269,6 +295,8 @@ function ProductToolbar({
             tracking-wider
             transition-all
             duration-200
+            sm:px-4
+            lg:flex-none
             ${
               order === "desc"
                 ? `
@@ -319,6 +347,7 @@ function ProductToolbar({
             hover:shadow-[0_0_15px_rgba(163,230,53,0.75),0_0_32px_rgba(163,230,53,0.28)]
             active:scale-[0.98]
             lg:w-auto
+            lg:shrink-0
           "
         >
 

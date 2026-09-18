@@ -62,12 +62,12 @@ function RecentProducts() {
 
       const response = await API.get("/products/", {
         params: {
-  name: search || undefined,
-  category: category || undefined,
-  sort_by: sortBy || undefined,
-  order,
-  limit: 100,
-},
+          name: search || undefined,
+          category: category || undefined,
+          sort_by: sortBy || undefined,
+          order,
+          limit: 100,
+        },
       });
 
       if (
@@ -192,11 +192,12 @@ function RecentProducts() {
       <div
         className="
           overflow-hidden
-          rounded-2xl
+          rounded-xl
           border
           border-lime-300/30
           bg-[#111C2E]
           shadow-[0_0_22px_rgba(163,230,53,0.08),0_0_55px_rgba(163,230,53,0.035)]
+          sm:rounded-2xl
         "
       >
 
@@ -209,15 +210,27 @@ function RecentProducts() {
             border-b
             border-lime-300/20
             bg-[#111C2E]
-            px-5
-            py-5
+            px-4
+            py-4
             shadow-[0_4px_20px_rgba(163,230,53,0.035)]
+            sm:px-5
+            sm:py-5
             lg:px-6
           "
         >
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div
+            className="
+              flex
+              flex-col
+              justify-between
+              gap-3
+              sm:gap-4
+              lg:flex-row
+              lg:items-center
+            "
+          >
 
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
 
               <div
                 className="
@@ -237,14 +250,16 @@ function RecentProducts() {
                 <Package className="h-5 w-5 text-lime-300" />
               </div>
 
-              <div>
-                <h2 className="text-xl font-bold text-white">
+              <div className="min-w-0">
+
+                <h2 className="text-lg font-bold text-white sm:text-xl">
                   Products
                 </h2>
 
                 <p className="mt-0.5 text-xs font-semibold text-white/65">
                   Manage your product catalogue
                 </p>
+
               </div>
 
             </div>
@@ -254,19 +269,22 @@ function RecentProducts() {
             <div
               className="
                 flex
+                w-fit
+                shrink-0
                 items-center
                 gap-2.5
-                self-start
                 rounded-xl
                 border
                 border-lime-300/25
                 bg-[#0B1220]
-                px-4
-                py-2.5
+                px-3
+                py-2
                 shadow-[0_0_16px_rgba(163,230,53,0.06)]
-                lg:self-auto
+                sm:px-4
+                sm:py-2.5
               "
             >
+
               <span
                 className="
                   h-2
@@ -278,18 +296,22 @@ function RecentProducts() {
               />
 
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">
+
+                <p className="text-[9px] font-bold uppercase tracking-wider text-white/55 sm:text-[10px]">
                   Products
                 </p>
 
                 <p className="text-sm font-bold text-white">
                   {products.length}
                 </p>
+
               </div>
+
             </div>
 
           </div>
         </div>
+
 
         {/* =====================================================
             TOOLBAR
@@ -300,8 +322,9 @@ function RecentProducts() {
             border-b
             border-lime-300/15
             bg-[#0F192A]
-            px-5
+            px-4
             py-4
+            sm:px-5
             lg:px-6
           "
         >
@@ -319,13 +342,21 @@ function RecentProducts() {
           />
         </div>
 
+
         {/* =====================================================
             TABLE
+            Horizontal scrolling is intentional on mobile.
         ====================================================== */}
 
-        <div className="w-full overflow-hidden">
+        <div className="w-full overflow-x-auto">
 
-          <table className="w-full table-fixed">
+          <table
+            className="
+              w-full
+              min-w-[900px]
+              table-fixed
+            "
+          >
 
             {/* =================================================
                 COLUMN WIDTHS
@@ -342,6 +373,7 @@ function RecentProducts() {
                 <col className="w-[10%]" />
               )}
             </colgroup>
+
 
             {/* =================================================
                 TABLE HEADER
@@ -386,6 +418,7 @@ function RecentProducts() {
               </tr>
             </thead>
 
+
             <tbody>
 
               {/* =================================================
@@ -422,6 +455,7 @@ function RecentProducts() {
                 </tr>
               )}
 
+
               {/* =================================================
                   EMPTY
               ================================================== */}
@@ -432,7 +466,7 @@ function RecentProducts() {
                     colSpan={isAdmin ? 6 : 5}
                     className="py-16"
                   >
-                    <div className="flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center justify-center px-4">
 
                       <div
                         className="
@@ -455,7 +489,7 @@ function RecentProducts() {
                         No Products Found
                       </p>
 
-                      <p className="mt-1 text-xs font-semibold text-white/60">
+                      <p className="mt-1 text-center text-xs font-semibold text-white/60">
                         Try another search or add a new product.
                       </p>
 
@@ -463,6 +497,7 @@ function RecentProducts() {
                   </td>
                 </tr>
               )}
+
 
               {/* =================================================
                   PRODUCTS
@@ -548,6 +583,7 @@ function RecentProducts() {
 
                       </td>
 
+
                       {/* =================================================
                           CATEGORY
                       ================================================== */}
@@ -576,6 +612,7 @@ function RecentProducts() {
 
                       </td>
 
+
                       {/* =================================================
                           PRICE
                       ================================================== */}
@@ -590,6 +627,7 @@ function RecentProducts() {
                         </p>
 
                       </td>
+
 
                       {/* =================================================
                           STOCK
@@ -620,6 +658,7 @@ function RecentProducts() {
                               bg-white/[0.08]
                             "
                           >
+
                             <div
                               className={`
                                 h-full
@@ -642,11 +681,13 @@ function RecentProducts() {
                                 )}%`,
                               }}
                             />
+
                           </div>
 
                         </div>
 
                       </td>
+
 
                       {/* =================================================
                           STATUS
@@ -689,6 +730,7 @@ function RecentProducts() {
 
                       </td>
 
+
                       {/* =================================================
                           ACTIONS
                       ================================================== */}
@@ -724,6 +766,7 @@ function RecentProducts() {
                             >
                               <FaEdit size={12} />
                             </button>
+
 
                             <button
                               onClick={() =>
@@ -767,6 +810,7 @@ function RecentProducts() {
 
         </div>
 
+
         {/* =====================================================
             BOTTOM STATUS
         ====================================================== */}
@@ -779,12 +823,13 @@ function RecentProducts() {
             border-t
             border-lime-300/15
             bg-[#0D1727]
-            px-5
+            px-4
             py-3.5
             shadow-[0_-4px_18px_rgba(163,230,53,0.025)]
             sm:flex-row
             sm:items-center
             sm:justify-between
+            sm:px-5
             lg:px-6
           "
         >
@@ -795,6 +840,7 @@ function RecentProducts() {
               className="
                 h-1.5
                 w-1.5
+                shrink-0
                 rounded-full
                 bg-lime-300
                 shadow-[0_0_8px_rgba(163,230,53,1)]
@@ -809,6 +855,7 @@ function RecentProducts() {
 
           </div>
 
+
           <p className="text-xs font-semibold text-white/50">
             {products.length} product records
           </p>
@@ -816,6 +863,7 @@ function RecentProducts() {
         </div>
 
       </div>
+
 
       {/* =======================================================
           ADD PRODUCT MODAL
@@ -829,6 +877,7 @@ function RecentProducts() {
         />
       )}
 
+
       {/* =======================================================
           EDIT PRODUCT MODAL
       ======================================================== */}
@@ -841,6 +890,7 @@ function RecentProducts() {
           onProductUpdated={handleProductUpdated}
         />
       )}
+
 
       {/* =======================================================
           DELETE PRODUCT MODAL
@@ -856,6 +906,7 @@ function RecentProducts() {
           onConfirm={deleteProduct}
         />
       )}
+
     </>
   );
 }
