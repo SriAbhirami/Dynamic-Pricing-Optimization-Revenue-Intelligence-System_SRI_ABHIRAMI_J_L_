@@ -1,232 +1,95 @@
-
 import os
 import requests
 
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+REEF_API_URL = "https://api.reefapi.com"
+AMAZON_SEARCH_URL = f"{REEF_API_URL}/amazon/v1/search"
 
-APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
-
-# Apify Actor ID used in our successful test
-APIFY_ACTOR_ID = "AB1hagbwjvrVAF3TT"
-
-APIFY_URL = (
-    f"https://api.apify.com/v2/actors/"
-    f"{APIFY_ACTOR_ID}/run-sync-get-dataset-items"
-)
-
-
-# ============================================================
-# AMAZON COMPETITOR SCRAPER
-# ============================================================
 
 def scrape_competitor_price(product_name: str):
     """
-    Fetch the first Amazon search result for the requested product
-    using the Apify Amazon Search Scraper Actor.
-
-    The Actor performs the actual Amazon scraping externally,
-    so Render does not need to launch Chromium/Playwright.
+    Search Amazon India using ReefAPI and use the first result.
     """
+
+    api_key = os.getenv("REEF_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "REEF_API_KEY environment variable is not configured."
+        )
 
     product_name = product_name.strip()
 
-    print("\n")
-    print("=" * 60)
-    print("AMAZON COMPETITOR SCRAPER - APIFY")
+    if not product_name:
+        raise ValueError("Product name cannot be empty.")
+
+    print("\n" + "=" * 60)
+    print("REEFAPI AMAZON SEARCH")
     print("=" * 60)
     print(f"Requested product: {product_name}")
-    print("=" * 60)
-
-    # --------------------------------------------------------
-    # Validate API token
-    # --------------------------------------------------------
-
-    if not APIFY_API_TOKEN:
-        print("ERROR: APIFY_API_TOKEN is not configured.")
-
-        return {
-            "Requested Product": product_name,
-            "Amazon Product": "N/A",
-            "Price": "N/A",
-            "ASIN": "N/A",
-            "URL": "N/A",
-            "Error": "APIFY_API_TOKEN is not configured"
-        }
-
-    # --------------------------------------------------------
-    # Actor input
-    # --------------------------------------------------------
-
-    actor_input = {
-        "searchQueries": [product_name],
-        "searchQuery": product_name,
-        "country": "IN",
-        "maxResultsPerQuery": 1,
-        "maxSearchPages": 1,
-        "includeSponsored": False
-    }
-
-    # --------------------------------------------------------
-    # Headers
-    # --------------------------------------------------------
 
     headers = {
-        "Authorization": f"Bearer {APIFY_API_TOKEN}",
-        "Content-Type": "application/json"
+        "x-api-key": api_key,
+        "Content-Type": "application/json",
     }
 
-    try:
-        print("Starting Apify Actor...")
-        print(f"Actor ID: {APIFY_ACTOR_ID}")
-        print(f"Search query: {product_name}")
+    payload = {
+        "query": product_name,
+        "marketplace": "in",
+    }
 
-        # ----------------------------------------------------
-        # Run Actor and wait for dataset results
-        # ----------------------------------------------------
+    response = requests.post(
+        AMAZON_SEARCH_URL,
+        headers=headers,
+        json=payload,
+        timeout=45,
+    )
 
-        response = requests.post(
-            APIFY_URL,
-            headers=headers,
-            json=actor_input,
-            params={
-                "format": "json",
-                "clean": "true",
-                "limit": "1"
-            },
-            timeout=300
+    response.raise_for_status()
+
+    data = response.json()
+
+    if not data.get("ok"):
+        raise RuntimeError(
+            data.get("error") or "Amazon ReefAPI search failed."
         )
 
-        print(f"Apify HTTP status: {response.status_code}")
+    results = data.get("data", {}).get("results", [])
 
-        # ----------------------------------------------------
-        # Handle API errors
-        # ----------------------------------------------------
+    if not results:
+        raise RuntimeError(
+            f"No Amazon results found for '{product_name}'."
+        )
 
-        if response.status_code not in (200, 201):
-            print("Apify request failed.")
-            print(f"Response: {response.text[:1000]}")
+    # ---------------------------------------------------------
+    # FIRST AMAZON RESULT
+    # ---------------------------------------------------------
 
-            return {
-                "Requested Product": product_name,
-                "Amazon Product": "N/A",
-                "Price": "N/A",
-                "ASIN": "N/A",
-                "URL": "N/A",
-                "Error": f"Apify returned HTTP {response.status_code}"
-            }
+    product = results[0]
 
-        # ----------------------------------------------------
-        # Parse results
-        # ----------------------------------------------------
+    title = product.get("title") or "N/A"
+    price = product.get("price")
+    asin = product.get("asin") or "N/A"
+    url = product.get("url")
 
-        results = response.json()
+    if not url and asin != "N/A":
+        url = f"https://www.amazon.in/dp/{asin}"
 
-        print(f"Apify returned {len(results)} result(s).")
+    if price is None:
+        raise RuntimeError(
+            f"Amazon first result '{title}' has no price."
+        )
 
-        if not results:
-            print("No Amazon products found.")
+    print("\nAmazon first result:")
+    print(f"Product: {title}")
+    print(f"Price: {price}")
+    print(f"ASIN: {asin}")
+    print(f"URL: {url}")
+    print("=" * 60)
 
-            return {
-                "Requested Product": product_name,
-                "Amazon Product": "N/A",
-                "Price": "N/A",
-                "ASIN": "N/A",
-                "URL": "N/A",
-                "Error": "No Amazon results found"
-            }
-
-        # ----------------------------------------------------
-        # First Amazon result
-        # ----------------------------------------------------
-
-        first_result = results[0]
-
-        asin = first_result.get("asin")
-        price = first_result.get("price")
-        amazon_url = first_result.get("url")
-        title = first_result.get("title")
-
-        print("\nFirst Amazon result:")
-        print(f"Title: {title}")
-        print(f"ASIN: {asin}")
-        print(f"Price: {price}")
-        print(f"URL: {amazon_url}")
-
-        # ----------------------------------------------------
-        # Price validation
-        # ----------------------------------------------------
-
-        if price is None:
-            print("Amazon result does not contain a price.")
-
-            return {
-                "Requested Product": product_name,
-                "Amazon Product": title or "N/A",
-                "Price": "N/A",
-                "ASIN": asin or "N/A",
-                "URL": amazon_url or "N/A",
-                "Error": "Amazon product price unavailable"
-            }
-
-        # ----------------------------------------------------
-        # Final result
-        # ----------------------------------------------------
-
-        final_result = {
-            "Requested Product": product_name,
-            "Amazon Product": title or "Amazon Product",
-            "Price": price,
-            "ASIN": asin or "N/A",
-            "URL": amazon_url or "N/A"
-        }
-
-        print("\n")
-        print("=" * 60)
-        print("AMAZON COMPETITOR RESULT")
-        print("=" * 60)
-        print(final_result)
-        print("=" * 60)
-
-        return final_result
-
-    except requests.Timeout:
-        print("Apify request timed out.")
-
-        return {
-            "Requested Product": product_name,
-            "Amazon Product": "N/A",
-            "Price": "N/A",
-            "ASIN": "N/A",
-            "URL": "N/A",
-            "Error": "Apify request timed out"
-        }
-
-    except requests.RequestException as e:
-        print("Apify network error:")
-        print(f"{type(e).__name__}: {e}")
-
-        return {
-            "Requested Product": product_name,
-            "Amazon Product": "N/A",
-            "Price": "N/A",
-            "ASIN": "N/A",
-            "URL": "N/A",
-            "Error": str(e)
-        }
-
-    except Exception as e:
-        print("Unexpected Amazon scraper error:")
-        print(f"{type(e).__name__}: {e}")
-
-        return {
-            "Requested Product": product_name,
-            "Amazon Product": "N/A",
-            "Price": "N/A",
-            "ASIN": "N/A",
-            "URL": "N/A",
-            "Error": str(e)
-        }
-
+    return {
+        "Amazon Product": title,
+        "Price": price,
+        "ASIN": asin,
+        "URL": url or "N/A",
+    }

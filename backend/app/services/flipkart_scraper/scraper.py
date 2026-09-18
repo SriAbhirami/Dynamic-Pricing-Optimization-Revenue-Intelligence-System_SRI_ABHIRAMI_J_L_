@@ -2,279 +2,91 @@ import os
 import requests
 
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+REEF_API_URL = "https://api.reefapi.com"
+FLIPKART_SEARCH_URL = f"{REEF_API_URL}/flipkart/v1/search"
 
-APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN")
-
-APIFY_ACTOR_ID = "S8WYPuFl8SWsfvLXG"
-
-APIFY_URL = (
-    f"https://api.apify.com/v2/actors/"
-    f"{APIFY_ACTOR_ID}/run-sync-get-dataset-items"
-)
-
-
-# ============================================================
-# FLIPKART COMPETITOR SCRAPER
-# ============================================================
 
 def scrape_flipkart_product(product_name: str):
     """
-    Fetch the first Flipkart search result using Apify.
+    Search Flipkart using ReefAPI and use the first result.
     """
+
+    api_key = os.getenv("REEF_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "REEF_API_KEY environment variable is not configured."
+        )
 
     product_name = product_name.strip()
 
-    print("\n")
-    print("=" * 60)
-    print("FLIPKART COMPETITOR SCRAPER - APIFY")
+    if not product_name:
+        raise ValueError("Product name cannot be empty.")
+
+    print("\n" + "=" * 60)
+    print("REEFAPI FLIPKART SEARCH")
     print("=" * 60)
     print(f"Requested product: {product_name}")
-    print("=" * 60)
-
-    # --------------------------------------------------------
-    # Check Apify token
-    # --------------------------------------------------------
-
-    if not APIFY_API_TOKEN:
-        print("ERROR: APIFY_API_TOKEN is not configured.")
-
-        return {
-            "Requested Product": product_name,
-            "Flipkart Product": "N/A",
-            "Price": "N/A",
-            "Product ID": "N/A",
-            "URL": "N/A",
-            "Error": "APIFY_API_TOKEN is not configured"
-        }
-
-    # --------------------------------------------------------
-    # Flipkart Actor input
-    # --------------------------------------------------------
-
-    actor_input = {
-        "keyword": product_name,
-        "maxItems": 1
-    }
 
     headers = {
-        "Authorization": f"Bearer {APIFY_API_TOKEN}",
-        "Content-Type": "application/json"
+        "x-api-key": api_key,
+        "Content-Type": "application/json",
     }
 
-    try:
-        print("Starting Flipkart Apify Actor...")
-        print(f"Actor ID: {APIFY_ACTOR_ID}")
-        print(f"Search keyword: {product_name}")
+    payload = {
+        "q": product_name,
+        "page": 1,
+    }
 
-        response = requests.post(
-            APIFY_URL,
-            headers=headers,
-            json=actor_input,
-            params={
-                "format": "json",
-                "clean": "true",
-                "limit": "1"
-            },
-            timeout=300
+    response = requests.post(
+        FLIPKART_SEARCH_URL,
+        headers=headers,
+        json=payload,
+        timeout=45,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if not data.get("ok"):
+        raise RuntimeError(
+            data.get("error") or "Flipkart ReefAPI search failed."
         )
 
-        print(f"Apify HTTP status: {response.status_code}")
+    results = data.get("data", {}).get("results", [])
 
-        # ----------------------------------------------------
-        # Check HTTP response
-        # ----------------------------------------------------
-
-        if response.status_code not in (200, 201):
-            print("Flipkart Apify request failed.")
-            print(f"Response: {response.text[:1000]}")
-
-            return {
-                "Requested Product": product_name,
-                "Flipkart Product": "N/A",
-                "Price": "N/A",
-                "Product ID": "N/A",
-                "URL": "N/A",
-                "Error": f"Apify returned HTTP {response.status_code}"
-            }
-
-        # ----------------------------------------------------
-        # Parse response
-        # ----------------------------------------------------
-
-        results = response.json()
-
-        print(f"Apify returned {len(results)} result(s).")
-
-        if not isinstance(results, list):
-            print("Unexpected Apify response format.")
-
-            return {
-                "Requested Product": product_name,
-                "Flipkart Product": "N/A",
-                "Price": "N/A",
-                "Product ID": "N/A",
-                "URL": "N/A",
-                "Error": "Unexpected Apify response format"
-            }
-
-        if not results:
-            print("No Flipkart products found.")
-
-            return {
-                "Requested Product": product_name,
-                "Flipkart Product": "N/A",
-                "Price": "N/A",
-                "Product ID": "N/A",
-                "URL": "N/A",
-                "Error": "No Flipkart results found"
-            }
-
-        # ----------------------------------------------------
-        # First Flipkart result
-        # ----------------------------------------------------
-
-        first_result = results[0]
-
-        titles = first_result.get("titles") or {}
-        pricing = first_result.get("pricing") or {}
-
-        product_title = (
-            titles.get("title")
-            or titles.get("new_title")
-            or "Flipkart Product"
+    if not results:
+        raise RuntimeError(
+            f"No Flipkart results found for '{product_name}'."
         )
 
-        product_id = first_result.get("id")
+    # ---------------------------------------------------------
+    # FIRST FLIPKART RESULT
+    # ---------------------------------------------------------
 
-        base_url = first_result.get("base_url")
+    product = results[0]
 
-        # ----------------------------------------------------
-        # Extract current selling price
-        # ----------------------------------------------------
+    title = product.get("title") or "N/A"
+    price = product.get("price")
+    product_id = product.get("product_id") or "N/A"
+    url = product.get("url") or "N/A"
 
-        prices = pricing.get("prices") or []
+    if price is None:
+        raise RuntimeError(
+            f"Flipkart first result '{title}' has no price."
+        )
 
-        price = None
+    print("\nFlipkart first result:")
+    print(f"Product: {title}")
+    print(f"Price: {price}")
+    print(f"Product ID: {product_id}")
+    print(f"URL: {url}")
+    print("=" * 60)
 
-        # Prefer the current selling price
-        # rather than the strike-off/MRP price.
-        for price_item in prices:
-            if price_item.get("strike_off") is False:
-                price = price_item.get("value")
-                break
-
-        # Fallback
-        if price is None and prices:
-            price = prices[0].get("value")
-
-        # ----------------------------------------------------
-        # Build Flipkart URL
-        # ----------------------------------------------------
-
-        flipkart_url = "N/A"
-
-        if base_url:
-            if base_url.startswith("http://") or base_url.startswith("https://"):
-                flipkart_url = base_url
-            else:
-                flipkart_url = f"https://www.flipkart.com{base_url}"
-
-        # ----------------------------------------------------
-        # Print result
-        # ----------------------------------------------------
-
-        print("\nFirst Flipkart result:")
-        print(f"Title: {product_title}")
-        print(f"Product ID: {product_id}")
-        print(f"Price: {price}")
-        print(f"URL: {flipkart_url}")
-
-        # ----------------------------------------------------
-        # Price unavailable
-        # ----------------------------------------------------
-
-        if price is None:
-            print("Flipkart product price unavailable.")
-
-            return {
-                "Requested Product": product_name,
-                "Flipkart Product": product_title,
-                "Price": "N/A",
-                "Product ID": product_id or "N/A",
-                "URL": flipkart_url,
-                "Error": "Flipkart product price unavailable"
-            }
-
-        # ----------------------------------------------------
-        # Final result
-        # ----------------------------------------------------
-
-        final_result = {
-            "Requested Product": product_name,
-            "Flipkart Product": product_title,
-            "Price": price,
-            "Product ID": product_id or "N/A",
-            "URL": flipkart_url
-        }
-
-        print("\n")
-        print("=" * 60)
-        print("FLIPKART COMPETITOR RESULT")
-        print("=" * 60)
-        print(final_result)
-        print("=" * 60)
-
-        return final_result
-
-    # --------------------------------------------------------
-    # Timeout
-    # --------------------------------------------------------
-
-    except requests.Timeout:
-        print("Flipkart Apify request timed out.")
-
-        return {
-            "Requested Product": product_name,
-            "Flipkart Product": "N/A",
-            "Price": "N/A",
-            "Product ID": "N/A",
-            "URL": "N/A",
-            "Error": "Apify request timed out"
-        }
-
-    # --------------------------------------------------------
-    # Network error
-    # --------------------------------------------------------
-
-    except requests.RequestException as e:
-        print("Flipkart Apify network error:")
-        print(f"{type(e).__name__}: {e}")
-
-        return {
-            "Requested Product": product_name,
-            "Flipkart Product": "N/A",
-            "Price": "N/A",
-            "Product ID": "N/A",
-            "URL": "N/A",
-            "Error": str(e)
-        }
-
-    # --------------------------------------------------------
-    # Unexpected error
-    # --------------------------------------------------------
-
-    except Exception as e:
-        print("Unexpected Flipkart scraper error:")
-        print(f"{type(e).__name__}: {e}")
-
-        return {
-            "Requested Product": product_name,
-            "Flipkart Product": "N/A",
-            "Price": "N/A",
-            "Product ID": "N/A",
-            "URL": "N/A",
-            "Error": str(e)
-        }
+    return {
+        "Flipkart Product": title,
+        "Price": price,
+        "Product ID": product_id,
+        "URL": url,
+    }
