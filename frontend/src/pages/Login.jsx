@@ -322,19 +322,64 @@ function Login() {
                 </div>
 
 
-                {/* Google Login */}
+                {/* =========================
+                    Google Login Section
+                ========================= */}
 
-                <div className="w-full flex justify-center overflow-hidden">
+                <div
+                  className="
+                    relative
+                    w-full
+                    p-3
+                    sm:p-[13px]
+                    rounded-[14px]
+                    bg-gradient-to-br
+                    from-white/[0.065]
+                    to-lime-300/[0.045]
+                    border
+                    border-lime-300/30
+                    shadow-[0_0_28px_rgba(163,230,53,0.11),0_0_55px_rgba(163,230,53,0.055),inset_0_1px_0_rgba(255,255,255,0.05)]
+                    transition-all
+                    duration-300
+                    hover:border-lime-300/50
+                    hover:shadow-[0_0_32px_rgba(163,230,53,0.18),0_0_65px_rgba(163,230,53,0.10)]
+                    overflow-hidden
+                  "
+                >
 
-                  <div className="w-full max-w-[380px] flex justify-center">
+                  <div
+                    className="
+                      flex
+                      justify-center
+                      items-center
+                      w-full
+                      min-h-[48px]
+                      overflow-hidden
+                    "
+                  >
 
-                    <GoogleLogin
-                      onSuccess={handleGoogleLogin}
-                      onError={handleGoogleError}
-                      text="continue_with"
-                      shape="rectangular"
-                      width="380"
-                    />
+                    <div
+                      className="
+                        flex
+                        justify-center
+                        items-center
+                        w-full
+                        max-w-full
+                        overflow-hidden
+                      "
+                    >
+
+                      <GoogleLogin
+                        onSuccess={handleGoogleLogin}
+                        onError={handleGoogleError}
+                        theme="filled_black"
+                        size="large"
+                        text="continue_with"
+                        shape="rectangular"
+                        width="390"
+                      />
+
+                    </div>
 
                   </div>
 
