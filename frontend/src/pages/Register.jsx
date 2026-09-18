@@ -85,6 +85,14 @@ function Register() {
     }
   };
 
+  // =========================
+  // Google Registration Error
+  // =========================
+
+  const handleGoogleError = () => {
+    alert("Google registration failed");
+  };
+
   return (
     <>
       <style>{`
@@ -738,58 +746,144 @@ function Register() {
         .google-register-section {
           position: relative;
 
-          padding: 12px 13px;
+          width: 100%;
+
+          padding: 0;
 
           border-radius: 14px;
-
-          background:
-            linear-gradient(
-              135deg,
-              rgba(255, 255, 255, 0.065),
-              rgba(163, 230, 53, 0.045)
-            );
-
-          border: 1px solid rgba(163, 230, 53, 0.30);
-
-          box-shadow:
-            0 0 28px rgba(163, 230, 53, 0.11),
-            0 0 55px rgba(163, 230, 53, 0.055),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
           transition: all 0.3s ease;
         }
 
-        .google-register-section:hover {
-          border-color: rgba(163, 230, 53, 0.52);
 
-          box-shadow:
-            0 0 32px rgba(163, 230, 53, 0.18),
-            0 0 65px rgba(163, 230, 53, 0.10);
-        }
+        /* =========================================================
+           CUSTOM GOOGLE BUTTON
+           ========================================================= */
 
         .google-register-button {
+          position: relative;
+
+          width: 100%;
+
+          min-height: 54px;
+
           display: flex;
 
-          justify-content: center;
           align-items: center;
 
-          width: 100%;
-
-          min-height: 48px;
+          justify-content: center;
         }
 
-        .google-register-button > div {
-          max-width: 100%;
+        .custom-google-register-button {
+          position: relative;
 
           width: 100%;
 
+          height: 54px;
+
           display: flex;
+
+          align-items: center;
+
+          justify-content: center;
+
+          gap: 12px;
+
+          border-radius: 11px;
+
+          background: #111827;
+
+          border: 1px solid rgba(255, 255, 255, 0.10);
+
+          color: #ffffff;
+
+          font-size: 14px;
+
+          font-weight: 700;
+
+          cursor: pointer;
+
+          overflow: hidden;
+
+          transition:
+            transform 0.3s ease,
+            background 0.3s ease,
+            border-color 0.3s ease,
+            box-shadow 0.3s ease;
+        }
+
+        .custom-google-register-button::before {
+          content: "";
+
+          position: absolute;
+
+          inset: 0;
+
+          background:
+            linear-gradient(
+              90deg,
+              transparent,
+              rgba(255, 255, 255, 0.045),
+              transparent
+            );
+
+          opacity: 0;
+
+          transition: opacity 0.3s ease;
+        }
+
+        .custom-google-register-button:hover {
+          background: #182235;
+
+          border-color: rgba(255, 255, 255, 0.20);
+
+          transform: translateY(-2px);
+
+          box-shadow:
+            0 0 22px rgba(255, 255, 255, 0.08),
+            0 0 35px rgba(163, 230, 53, 0.08);
+        }
+
+        .custom-google-register-button:hover::before {
+          opacity: 1;
+        }
+
+        .custom-google-register-button:active {
+          transform: translateY(0);
+        }
+
+        .custom-google-register-button:disabled {
+          opacity: 0.60;
+
+          cursor: not-allowed;
+        }
+
+        .google-register-icon {
+          position: relative;
+
+          width: 24px;
+
+          height: 24px;
+
+          flex-shrink: 0;
+
+          display: flex;
+
+          align-items: center;
 
           justify-content: center;
         }
 
-        .google-register-button iframe {
-          max-width: 100%;
+        .google-register-icon svg {
+          width: 20px;
+
+          height: 20px;
+        }
+
+        .google-register-text {
+          position: relative;
+
+          white-space: nowrap;
         }
 
 
@@ -934,8 +1028,12 @@ function Register() {
             margin: 9px 0;
           }
 
-          .google-register-section {
-            padding: 9px 12px;
+          .google-register-button {
+            min-height: 50px;
+          }
+
+          .custom-google-register-button {
+            height: 50px;
           }
 
           .register-login {
@@ -1020,12 +1118,12 @@ function Register() {
             padding: 13px 16px;
           }
 
-          .google-register-section {
-            padding: 11px 8px;
+          .google-register-button {
+            min-height: 52px;
           }
 
-          .google-register-button {
-            min-height: 50px;
+          .custom-google-register-button {
+            height: 52px;
           }
         }
 
@@ -1091,6 +1189,14 @@ function Register() {
             font-size: 13px;
           }
 
+          .custom-google-register-button {
+            height: 50px;
+
+            font-size: 13px;
+
+            gap: 10px;
+          }
+
           .register-login {
             flex-direction: column;
 
@@ -1120,6 +1226,10 @@ function Register() {
           .analyst-badge-icon {
             width: 31px;
             height: 31px;
+          }
+
+          .custom-google-register-button {
+            font-size: 12px;
           }
         }
       `}</style>
@@ -1369,17 +1479,89 @@ function Register() {
 
                 <div className="google-register-button">
 
-                  <GoogleLogin
-                    onSuccess={handleGoogleRegister}
-                    onError={() => {
-                      alert("Google registration failed");
+                  {/* Visible Custom Google Button */}
+
+                  <button
+                    type="button"
+                    className="custom-google-register-button"
+                    onClick={() => {
+                      const googleButton =
+                        document.querySelector(
+                          '[data-google-register-hidden] button'
+                        );
+
+                      if (googleButton) {
+                        googleButton.click();
+                      }
                     }}
-                    theme="filled_black"
-                    size="large"
-                    text="signup_with"
-                    shape="rectangular"
-                    width="390"
-                  />
+                  >
+
+                    {/* Google Logo */}
+
+                    <span className="google-register-icon">
+
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill="#4285F4"
+                          d="M21.35 12.27c0-.71-.06-1.4-.18-2.05H12v3.88h5.24a4.48 4.48 0 0 1-1.94 2.94v2.44h3.14c1.84-1.69 2.91-4.18 2.91-7.21z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 21.5c2.63 0 4.84-.87 6.45-2.36l-3.14-2.44c-.87.58-1.98.93-3.31.93-2.55 0-4.71-1.72-5.49-4.03H3.26v2.52A9.74 9.74 0 0 0 12 21.5z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M6.51 13.6A5.86 5.86 0 0 1 6.2 12c0-.56.1-1.1.31-1.6V7.88H3.26A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.06 1.01 4.12l3.25-2.52z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 6.37c1.43 0 2.71.49 3.72 1.46l2.79-2.79C16.84 3.48 14.63 2.5 12 2.5a9.74 9.74 0 0 0-8.74 5.38L6.51 10.4C7.29 8.09 9.45 6.37 12 6.37z"
+                        />
+                      </svg>
+
+                    </span>
+
+
+                    {/* Button Text */}
+
+                    <span className="google-register-text">
+                      Continue with Google
+                    </span>
+
+                  </button>
+
+
+                  {/* Hidden Google OAuth Button */}
+
+                  <div
+                    data-google-register-hidden
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                      opacity: 0,
+                      pointerEvents: "none",
+                      width: "1px",
+                      height: "1px",
+                      overflow: "hidden"
+                    }}
+                  >
+
+                    <GoogleLogin
+                      onSuccess={handleGoogleRegister}
+                      onError={handleGoogleError}
+                      theme="filled_black"
+                      size="large"
+                      text="signup_with"
+                      shape="rectangular"
+                      width="1"
+                    />
+
+                  </div>
 
                 </div>
 
