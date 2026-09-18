@@ -323,127 +323,86 @@ function Login() {
 
 
                 {/* =========================
-                    Custom Google Button
+                    Google Login
                 ========================= */}
 
-                <div className="relative w-full">
+                <div
+                  className="
+                    relative
+                    w-full
+                    min-h-[54px]
+                    rounded-xl
+                    overflow-hidden
+                    bg-[#111827]
+                    border
+                    border-white/10
+                    transition-all
+                    duration-300
+                    hover:bg-[#182235]
+                    hover:border-white/20
+                    hover:shadow-[0_0_22px_rgba(255,255,255,0.08),0_0_35px_rgba(163,230,53,0.08)]
+                    hover:-translate-y-0.5
+                  "
+                >
 
-                  {/* Visible Custom Button */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
 
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => {
-                      const googleButton =
-                        document.querySelector(
-                          '[data-google-login-hidden] button'
-                        );
+                    <div className="flex items-center justify-center gap-3 text-white font-semibold text-sm">
 
-                      if (googleButton) {
-                        googleButton.click();
-                      }
-                    }}
-                    className="
-                      group
-                      relative
-                      w-full
-                      h-[54px]
-                      flex
-                      items-center
-                      justify-center
-                      gap-3
-                      rounded-xl
-                      bg-[#111827]
-                      border
-                      border-white/10
-                      text-white
-                      font-semibold
-                      transition-all
-                      duration-300
-                      hover:bg-[#182235]
-                      hover:border-white/20
-                      hover:shadow-[0_0_22px_rgba(255,255,255,0.08),0_0_35px_rgba(163,230,53,0.08)]
-                      hover:-translate-y-0.5
-                      active:translate-y-0
-                      disabled:opacity-60
-                      disabled:cursor-not-allowed
-                      overflow-hidden
-                    "
-                  >
-
-                    {/* Subtle hover glow */}
-
-                    <span
-                      className="
-                        absolute
-                        inset-0
-                        bg-gradient-to-r
-                        from-transparent
-                        via-white/[0.035]
-                        to-transparent
-                        opacity-0
-                        group-hover:opacity-100
-                        transition-opacity
-                        duration-300
-                      "
-                    />
-
-                    {/* Google Logo */}
-
-                    <span className="relative flex items-center justify-center w-6 h-6 shrink-0">
+                      {/* Google Logo */}
 
                       <svg
                         viewBox="0 0 24 24"
-                        className="w-5 h-5"
+                        className="w-5 h-5 shrink-0"
                         aria-hidden="true"
                       >
                         <path
                           fill="#4285F4"
                           d="M21.35 12.27c0-.71-.06-1.4-.18-2.05H12v3.88h5.24a4.48 4.48 0 0 1-1.94 2.94v2.44h3.14c1.84-1.69 2.91-4.18 2.91-7.21z"
                         />
+
                         <path
                           fill="#34A853"
                           d="M12 21.5c2.63 0 4.84-.87 6.45-2.36l-3.14-2.44c-.87.58-1.98.93-3.31.93-2.55 0-4.71-1.72-5.49-4.03H3.26v2.52A9.74 9.74 0 0 0 12 21.5z"
                         />
+
                         <path
                           fill="#FBBC05"
                           d="M6.51 13.6A5.86 5.86 0 0 1 6.2 12c0-.56.1-1.1.31-1.6V7.88H3.26A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.06 1.01 4.12l3.25-2.52z"
                         />
+
                         <path
                           fill="#EA4335"
                           d="M12 6.37c1.43 0 2.71.49 3.72 1.46l2.79-2.79C16.84 3.48 14.63 2.5 12 2.5a9.74 9.74 0 0 0-8.74 5.38L6.51 10.4C7.29 8.09 9.45 6.37 12 6.37z"
                         />
                       </svg>
 
-                    </span>
+                      <span>
+                        Continue with Google
+                      </span>
+
+                    </div>
+
+                  </div>
 
 
-                    {/* Button Text */}
-
-                    <span className="relative">
-                      Continue with Google
-                    </span>
-
-                  </button>
-
-
-                  {/* =========================
-                      Hidden Google OAuth Button
-                  ========================= */}
+                  {/* 
+                    IMPORTANT:
+                    This is the REAL GoogleLogin component.
+                    It remains fully functional and receives
+                    the user's click directly.
+                  */}
 
                   <div
-                    data-google-login-hidden
                     className="
-                      absolute
-                      left-1/2
-                      top-1/2
-                      -translate-x-1/2
-                      -translate-y-1/2
-                      opacity-0
-                      pointer-events-none
-                      w-[1px]
-                      h-[1px]
-                      overflow-hidden
+                      relative
+                      z-10
+                      w-full
+                      min-h-[54px]
+                      flex
+                      items-center
+                      justify-center
+                      opacity-[0.01]
                     "
                   >
 
@@ -454,7 +413,7 @@ function Login() {
                       size="large"
                       text="continue_with"
                       shape="rectangular"
-                      width="1"
+                      width="100%"
                     />
 
                   </div>
@@ -522,3 +481,4 @@ function Login() {
 }
 
 export default Login;
+
