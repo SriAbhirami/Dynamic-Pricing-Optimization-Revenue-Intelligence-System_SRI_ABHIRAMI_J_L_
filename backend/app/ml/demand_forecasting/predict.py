@@ -221,6 +221,106 @@ def build_model_input(
 
 
 # ============================================================
+# HISTORICAL DEMAND FALLBACK
+# ============================================================
+
+def _calculate_fallback_demand(
+    input_data: dict
+) -> float:
+    """
+    Calculate a stable fallback demand using the rolling
+    historical demand supplied by the API.
+
+    The current 3-day, 7-day and 14-day demand values are
+    combined using weights that give more importance to the
+    most recent demand.
+
+    This is only used when the production ML model returns
+    an invalid or non-positive prediction.
+    """
+
+    sales_3 = max(
+        float(
+            input_data.get(
+                "sales_rolling_3",
+                0
+            ) or 0
+        ),
+        0.0
+    )
+
+    sales_7 = max(
+        float(
+            input_data.get(
+                "sales_rolling_7",
+                0
+            ) or 0
+        ),
+        0.0
+    )
+
+    sales_14 = max(
+        float(
+            input_data.get(
+                "sales_rolling_14",
+                0
+            ) or 0
+        ),
+        0.0
+    )
+
+    # --------------------------------------------------------
+    # Weighted historical baseline
+    #
+    # Recent demand gets more importance:
+    #
+    # 3-day  -> 50%
+    # 7-day  -> 30%
+    # 14-day -> 20%
+    #
+    # --------------------------------------------------------
+
+    available_values = []
+
+    if sales_3 > 0:
+        available_values.append(
+            (sales_3, 0.50)
+        )
+
+    if sales_7 > 0:
+        available_values.append(
+            (sales_7, 0.30)
+        )
+
+    if sales_14 > 0:
+        available_values.append(
+            (sales_14, 0.20)
+        )
+
+    if not available_values:
+        return 0.0
+
+    total_weight = sum(
+        weight
+        for _, weight in available_values
+    )
+
+    weighted_demand = (
+        sum(
+            value * weight
+            for value, weight in available_values
+        )
+        /
+        total_weight
+    )
+
+    return max(
+        float(weighted_demand),
+        0.0
+    )
+
+
+# ============================================================
 # SINGLE DEMAND PREDICTION
 # ============================================================
 
@@ -232,12 +332,11 @@ def predict_demand(
     production XGBRegressor model.
 
     Production safeguard:
-    If the deployed model returns a negative, NaN,
-    infinite, or otherwise unusable prediction, the
-    historical rolling demand is used as a fallback.
 
-    This prevents the recursive forecasting process
-    from collapsing into all-zero predictions.
+    1. Use the ML prediction when it is valid and positive.
+    2. If the ML model returns a negative/invalid value,
+       use the current rolling historical demand as fallback.
+    3. Never return negative or invalid demand.
     """
 
     print("=" * 70)
@@ -328,119 +427,56 @@ def predict_demand(
 
 
         # ----------------------------------------------------
-        # DETERMINE HISTORICAL FALLBACK
-        # ----------------------------------------------------
-        #
-        # We use the most recent available rolling demand.
-        #
-        # Priority:
-        #
-        #     sales_rolling_3
-        #     sales_rolling_7
-        #     sales_rolling_14
-        #
-        # This is preferable to returning zero because the
-        # API already provides these values as historical
-        # demand information.
-        #
-        # ----------------------------------------------------
-
-        sales_3 = max(
-            float(
-                input_data.get(
-                    "sales_rolling_3",
-                    0
-                ) or 0
-            ),
-            0.0
-        )
-
-        sales_7 = max(
-            float(
-                input_data.get(
-                    "sales_rolling_7",
-                    0
-                ) or 0
-            ),
-            0.0
-        )
-
-        sales_14 = max(
-            float(
-                input_data.get(
-                    "sales_rolling_14",
-                    0
-                ) or 0
-            ),
-            0.0
-        )
-
-
-        # ----------------------------------------------------
-        # VALIDATE MODEL OUTPUT
+        # CHECK MODEL OUTPUT
         # ----------------------------------------------------
 
         if (
-            not math.isfinite(
+            math.isfinite(
                 predicted_demand
             )
-            or
-            predicted_demand <= 0
+            and
+            predicted_demand > 0
         ):
 
-            print(
-                "\n⚠️ MODEL FALLBACK ACTIVATED"
-            )
-
-            print(
-                "The production model returned "
-                "a non-positive or invalid demand."
-            )
-
-            print(
-                "sales_rolling_3:",
-                sales_3
-            )
-
-            print(
-                "sales_rolling_7:",
-                sales_7
-            )
-
-            print(
-                "sales_rolling_14:",
-                sales_14
-            )
-
-
             # ------------------------------------------------
-            # SELECT FALLBACK
+            # VALID ML PREDICTION
             # ------------------------------------------------
 
-            if sales_3 > 0:
+            final_demand = (
+                predicted_demand
+            )
 
-                fallback_demand = sales_3
+            print(
+                "Prediction source: ML model"
+            )
 
-            elif sales_7 > 0:
+        else:
 
-                fallback_demand = sales_7
+            # ------------------------------------------------
+            # FALLBACK
+            # ------------------------------------------------
 
-            elif sales_14 > 0:
+            fallback_demand = (
+                _calculate_fallback_demand(
+                    input_data
+                )
+            )
 
-                fallback_demand = sales_14
+            print(
+                "\nMODEL FALLBACK ACTIVATED"
+            )
 
-            else:
-
-                fallback_demand = 0.0
-
+            print(
+                "The ML model returned "
+                "a non-positive or invalid value."
+            )
 
             print(
                 "Fallback demand:",
                 fallback_demand
             )
 
-
-            predicted_demand = (
+            final_demand = (
                 fallback_demand
             )
 
@@ -449,27 +485,27 @@ def predict_demand(
         # FINAL SAFETY
         # ----------------------------------------------------
 
-        predicted_demand = max(
+        final_demand = max(
             float(
-                predicted_demand
+                final_demand
             ),
             0.0
         )
 
         print(
             "Final predicted demand:",
-            predicted_demand
+            final_demand
         )
 
         print("=" * 70)
 
-        return predicted_demand
+        return final_demand
 
 
     except Exception as e:
 
         # ----------------------------------------------------
-        # MODEL FAILURE
+        # ML FAILURE
         # ----------------------------------------------------
 
         print("=" * 70)
@@ -490,99 +526,23 @@ def predict_demand(
 
 
         # ----------------------------------------------------
-        # EMERGENCY HISTORICAL FALLBACK
-        # ----------------------------------------------------
-        #
-        # If preprocessing/model prediction itself fails,
-        # use the historical rolling demand instead of
-        # allowing the entire forecast API to fail.
-        #
+        # EMERGENCY FALLBACK
         # ----------------------------------------------------
 
-        try:
-
-            sales_3 = max(
-                float(
-                    input_data.get(
-                        "sales_rolling_3",
-                        0
-                    ) or 0
-                ),
-                0.0
+        fallback_demand = (
+            _calculate_fallback_demand(
+                input_data
             )
-
-            sales_7 = max(
-                float(
-                    input_data.get(
-                        "sales_rolling_7",
-                        0
-                    ) or 0
-                ),
-                0.0
-            )
-
-            sales_14 = max(
-                float(
-                    input_data.get(
-                        "sales_rolling_14",
-                        0
-                    ) or 0
-                ),
-                0.0
-            )
-
-
-            if sales_3 > 0:
-
-                print(
-                    "Emergency fallback:",
-                    sales_3
-                )
-
-                print("=" * 70)
-
-                return sales_3
-
-
-            if sales_7 > 0:
-
-                print(
-                    "Emergency fallback:",
-                    sales_7
-                )
-
-                print("=" * 70)
-
-                return sales_7
-
-
-            if sales_14 > 0:
-
-                print(
-                    "Emergency fallback:",
-                    sales_14
-                )
-
-                print("=" * 70)
-
-                return sales_14
-
-
-        except Exception as fallback_error:
-
-            print(
-                "Fallback error:",
-                str(fallback_error)
-            )
-
+        )
 
         print(
-            "No historical demand available."
+            "Emergency fallback demand:",
+            fallback_demand
         )
 
         print("=" * 70)
 
-        return 0.0
+        return fallback_demand
 
 
 # ============================================================
@@ -600,15 +560,12 @@ def _get_season(
     """
 
     if month in [3, 4, 5]:
-
         return "Summer"
 
     if month in [6, 7, 8, 9]:
-
         return "Monsoon"
 
     if month in [10, 11]:
-
         return "Autumn"
 
     return "Winter"
@@ -634,11 +591,10 @@ def generate_demand_forecast(
     The production model predicts next-day demand.
 
     Therefore this function predicts one future day at a time.
-    The prediction is then added to the rolling-demand history
-    before predicting the next day.
 
-    The returned structure is compatible with the
-    DemandForecast API layer.
+    Each predicted day is added to the demand history.
+    The rolling 3-day, 7-day and 14-day values are then
+    recalculated for the following day.
     """
 
 
@@ -677,7 +633,7 @@ def generate_demand_forecast(
             input_data.get(
                 "sales_rolling_3",
                 0
-            )
+            ) or 0
         ),
         0.0
     )
@@ -687,7 +643,7 @@ def generate_demand_forecast(
             input_data.get(
                 "sales_rolling_7",
                 0
-            )
+            ) or 0
         ),
         0.0
     )
@@ -697,7 +653,7 @@ def generate_demand_forecast(
             input_data.get(
                 "sales_rolling_14",
                 0
-            )
+            ) or 0
         ),
         0.0
     )
@@ -707,13 +663,11 @@ def generate_demand_forecast(
     # INITIAL DAILY BASELINE
     # ========================================================
     #
-    # The API supplies rolling demand values rather than the
-    # individual previous 14 days.
+    # Build an initial synthetic history from the available
+    # rolling demand values.
     #
-    # We therefore construct a stable initial history.
-    #
-    # Once recursive predictions begin, the actual predicted
-    # values replace this initial history.
+    # This is only required because the API gives us rolling
+    # averages rather than the actual previous 14 observations.
     #
     # ========================================================
 
@@ -751,7 +705,7 @@ def generate_demand_forecast(
             input_data.get(
                 "inventory_level",
                 0
-            )
+            ) or 0
         ),
         0.0
     )
@@ -808,7 +762,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # UPDATE ROLLING FEATURES
+        # CURRENT ROLLING FEATURES
         # ----------------------------------------------------
 
         recent_3 = history[-3:]
@@ -863,6 +817,10 @@ def generate_demand_forecast(
         )
 
 
+        # ----------------------------------------------------
+        # UPDATE ROLLING DEMAND
+        # ----------------------------------------------------
+
         forecast_input[
             "sales_rolling_3"
         ] = rolling_3
@@ -879,11 +837,6 @@ def generate_demand_forecast(
         # ----------------------------------------------------
         # UPDATE SEASON
         # ----------------------------------------------------
-        #
-        # Keep the user's supplied season when present.
-        # Otherwise calculate it from the future month.
-        #
-        # ----------------------------------------------------
 
         if not forecast_input.get(
             "season"
@@ -897,7 +850,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # INVENTORY
+        # UPDATE INVENTORY
         # ----------------------------------------------------
 
         forecast_input[
@@ -909,7 +862,7 @@ def generate_demand_forecast(
 
 
         # ----------------------------------------------------
-        # STOCKOUT STATUS
+        # UPDATE STOCKOUT STATUS
         # ----------------------------------------------------
 
         forecast_input[
@@ -1069,7 +1022,7 @@ def generate_demand_forecast(
                 input_data.get(
                     "current_price",
                     0
-                )
+                ) or 0
             ),
             0.0
         )
@@ -1233,7 +1186,10 @@ def generate_demand_forecast(
     valid_values = [
         float(value)
         for value in daily_predictions
-        if float(value) >= 0
+        if math.isfinite(
+            float(value)
+        )
+        and float(value) >= 0
     ]
 
 
