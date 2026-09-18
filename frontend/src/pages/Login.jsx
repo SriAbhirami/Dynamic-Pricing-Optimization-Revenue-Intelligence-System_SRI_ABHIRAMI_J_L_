@@ -117,7 +117,7 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B1220] text-white flex items-center justify-center px-6 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0B1220] text-white flex items-center justify-center px-4 sm:px-6 py-6 sm:py-8 relative overflow-hidden">
 
       {/* =========================
           Background Glow
@@ -136,7 +136,7 @@ function Login() {
           Main Login Card
       ========================= */}
 
-      <div className="relative w-full max-w-xl">
+      <div className="relative w-full max-w-xl min-w-0">
 
         {/* Strong Green Glow */}
 
@@ -149,12 +149,12 @@ function Login() {
             Login Card
         ========================= */}
 
-        <div className="relative bg-[#111C2E]/95 backdrop-blur-xl border border-lime-300/30 rounded-3xl px-14 py-10 shadow-[0_0_15px_rgba(163,230,53,0.18),0_0_40px_rgba(163,230,53,0.12),0_0_80px_rgba(163,230,53,0.06)]">
+        <div className="relative bg-[#111C2E]/95 backdrop-blur-xl border border-lime-300/30 rounded-3xl px-5 py-8 sm:px-8 md:px-14 sm:py-10 shadow-[0_0_15px_rgba(163,230,53,0.18),0_0_40px_rgba(163,230,53,0.12),0_0_80px_rgba(163,230,53,0.06)]">
 
 
           {/* Top Neon Line */}
 
-          <div className="absolute top-0 left-12 right-12 h-px bg-gradient-to-r from-transparent via-lime-300 to-transparent shadow-[0_0_12px_rgba(163,230,53,0.8)]" />
+          <div className="absolute top-0 left-6 right-6 sm:left-12 sm:right-12 h-px bg-gradient-to-r from-transparent via-lime-300 to-transparent shadow-[0_0_12px_rgba(163,230,53,0.8)]" />
 
 
           {/* =========================
@@ -176,7 +176,7 @@ function Login() {
             </div>
 
 
-            <h1 className="text-4xl font-bold tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
 
               PricePilot
               <span className="text-lime-300 drop-shadow-[0_0_10px_rgba(163,230,53,0.45)]">
@@ -324,15 +324,19 @@ function Login() {
 
                 {/* Google Login */}
 
-                <div className="flex justify-center">
+                <div className="w-full flex justify-center overflow-hidden">
 
-                  <GoogleLogin
-                    onSuccess={handleGoogleLogin}
-                    onError={handleGoogleError}
-                    text="continue_with"
-                    shape="rectangular"
-                    width="380"
-                  />
+                  <div className="w-full max-w-[380px] flex justify-center">
+
+                    <GoogleLogin
+                      onSuccess={handleGoogleLogin}
+                      onError={handleGoogleError}
+                      text="continue_with"
+                      shape="rectangular"
+                      width="380"
+                    />
+
+                  </div>
 
                 </div>
 
