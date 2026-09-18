@@ -7,7 +7,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Gauge,
-  Package,
   Sparkles,
   Target,
   TrendingDown,
@@ -63,7 +62,6 @@ function Forecast() {
   // ACTIVE HORIZON
   // ============================================================
 
-  // Short Term is selected by default.
   const [activeHorizon, setActiveHorizon] =
     useState("short");
 
@@ -108,11 +106,11 @@ function Forecast() {
 
     year: 2026,
 
-    month: 8,
+    month: 9,
 
-    day: 15,
+    day: 18,
 
-    day_of_week: 6,
+    day_of_week: 4,
 
   });
 
@@ -241,7 +239,7 @@ function Forecast() {
         productList.length > 0
       ) {
 
-        applyProduct(
+        await applyProduct(
           productList[0]
         );
 
@@ -339,6 +337,7 @@ function Forecast() {
 
       setFormData(
         previous => ({
+
           ...previous,
 
           product_id:
@@ -466,6 +465,7 @@ function Forecast() {
 
       setFormData(
         previous => ({
+
           ...previous,
 
           [name]: value,
@@ -504,7 +504,7 @@ function Forecast() {
 
 
         // ======================================================
-        // PREDICTION PAYLOAD
+        // API PAYLOAD
         // ======================================================
 
         const payload = {
@@ -616,7 +616,7 @@ function Forecast() {
 
 
         // ======================================================
-        // SINGLE DEMAND PREDICTION
+        // CURRENT DEMAND PREDICTION
         // ======================================================
 
         const predictionResponse =
@@ -627,14 +627,14 @@ function Forecast() {
 
 
         // ======================================================
-        // PRODUCTION FORECAST
+        // SIX-HORIZON PRODUCTION FORECAST
         // ======================================================
 
         const productionResponse =
-  await API.post(
-    "/demand-forecast/forecast",
-    payload
-  );
+          await API.post(
+            "/demand-forecast/forecast",
+            payload
+          );
 
 
         const predictionData =
@@ -646,7 +646,7 @@ function Forecast() {
 
 
         // ======================================================
-        // VALIDATE PREDICTION
+        // VALIDATE CURRENT PREDICTION
         // ======================================================
 
         if (
@@ -664,20 +664,39 @@ function Forecast() {
 
 
         // ======================================================
-        // VALIDATE PRODUCTION FORECAST
+        // VALIDATE SIX FORECAST HORIZONS
         // ======================================================
 
-        if (
-          !productionData?.seven_days ||
-          !productionData?.fourteen_days ||
-          !productionData?.thirty_days ||
-          !productionData?.three_months ||
-          !productionData?.six_months ||
-          !productionData?.twelve_months
-        ) {
+        const requiredHorizons = [
+
+          "seven_days",
+
+          "fourteen_days",
+
+          "thirty_days",
+
+          "three_months",
+
+          "six_months",
+
+          "twelve_months",
+
+        ];
+
+
+        const missingHorizon =
+          requiredHorizons.find(
+            horizon =>
+              !productionData?.[
+                horizon
+              ]
+          );
+
+
+        if (missingHorizon) {
 
           throw new Error(
-            "The production forecast response is incomplete."
+            `The production forecast response is missing ${missingHorizon}.`
           );
 
         }
@@ -720,6 +739,14 @@ function Forecast() {
               .twelve_months,
 
         });
+
+
+        // Always open the 30-day planning view
+        // after a fresh forecast.
+
+        setActiveHorizon(
+          "short"
+        );
 
 
       } catch (err) {
@@ -871,7 +898,7 @@ function Forecast() {
         }
 
 
-        return {
+        const horizonMap = {
 
           short:
             forecast.thirty_days,
@@ -882,7 +909,12 @@ function Forecast() {
           long:
             forecast.twelve_months,
 
-        }[activeHorizon];
+        };
+
+
+        return horizonMap[
+          activeHorizon
+        ] || null;
 
       },
       [
@@ -1206,6 +1238,7 @@ function Forecast() {
           .seasonal_data
           .map(
             item => ({
+
               ...item,
 
               demand:
@@ -1658,8 +1691,6 @@ function Forecast() {
 
             <div className="flex items-center gap-4">
 
-              {/* NEON FORECAST ICON */}
-
               <div
                 className="
                   flex
@@ -1677,13 +1708,13 @@ function Forecast() {
               >
 
                 <TrendingUp
-  className="
-    h-6
-    w-6
-    text-lime-300
-    drop-shadow-[0_0_8px_rgba(163,230,53,0.8)]
-  "
-/>
+                  className="
+                    h-6
+                    w-6
+                    text-lime-300
+                    drop-shadow-[0_0_8px_rgba(163,230,53,0.8)]
+                  "
+                />
 
               </div>
 
@@ -1718,8 +1749,6 @@ function Forecast() {
 
             </div>
 
-
-            
           </header>
 
 
@@ -1865,9 +1894,7 @@ function Forecast() {
               </div>
 
 
-              {/* ==================================================
-                  PRODUCT SUMMARY
-              ================================================== */}
+              {/* PRODUCT SUMMARY */}
 
               {selectedProduct && (
 
@@ -1902,7 +1929,6 @@ function Forecast() {
                       border-lime-300/10
                       bg-[#0B1220]
                       p-4
-                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
                     "
                   >
 
@@ -1924,7 +1950,6 @@ function Forecast() {
                       border-lime-300/10
                       bg-[#0B1220]
                       p-4
-                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
                     "
                   >
 
@@ -1948,7 +1973,6 @@ function Forecast() {
                       border-lime-300/10
                       bg-[#0B1220]
                       p-4
-                      shadow-[0_0_12px_rgba(163,230,53,0.04)]
                     "
                   >
 
@@ -1992,9 +2016,7 @@ function Forecast() {
                 shadow-[0_0_18px_rgba(239,68,68,0.05)]
               "
             >
-
               {error}
-
             </div>
 
           )}
@@ -2008,9 +2030,7 @@ function Forecast() {
 
             <>
 
-              {/* ==================================================
-                  HERO METRICS
-              ================================================== */}
+              {/* HERO METRICS */}
 
               <section className="mt-7 grid gap-4 lg:grid-cols-[1.35fr_1fr_1fr]">
 
@@ -2030,7 +2050,6 @@ function Forecast() {
                 >
 
                   <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-lime-300/10 blur-3xl" />
-
 
                   <div className="relative">
 
@@ -2060,7 +2079,6 @@ function Forecast() {
                           border
                           border-lime-300/20
                           bg-lime-300/10
-                          shadow-[0_0_12px_rgba(163,230,53,0.12)]
                         "
                       >
 
@@ -2127,7 +2145,6 @@ function Forecast() {
                     border-lime-300/20
                     bg-[#111C2E]
                     p-6
-                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_25px_rgba(163,230,53,0.05)]
                   "
                 >
 
@@ -2178,7 +2195,6 @@ function Forecast() {
                     border-lime-300/20
                     bg-[#111C2E]
                     p-6
-                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_25px_rgba(163,230,53,0.05)]
                   "
                 >
 
@@ -2233,25 +2249,21 @@ function Forecast() {
 
               <section className="mt-8">
 
-                <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div className="mb-4">
 
-                  <div>
+                  <div className="flex items-center gap-2">
 
-                    <div className="flex items-center gap-2">
+                    <CalendarDays className="h-5 w-5 text-lime-300" />
 
-                      <CalendarDays className="h-5 w-5 text-lime-300" />
-
-                      <h2 className="text-xl font-black">
-                        Forecast Horizons
-                      </h2>
-
-                    </div>
-
-                    <p className="mt-1 text-xs text-white/40">
-                      Switch between planning horizons to inspect the business outlook.
-                    </p>
+                    <h2 className="text-xl font-black">
+                      Forecast Horizons
+                    </h2>
 
                   </div>
+
+                  <p className="mt-1 text-xs text-white/40">
+                    Switch between planning horizons to inspect the business outlook.
+                  </p>
 
                 </div>
 
@@ -2266,35 +2278,54 @@ function Forecast() {
                     border-lime-300/20
                     bg-[#111C2E]
                     p-2
-                    shadow-[0_0_10px_rgba(163,230,53,0.08),0_0_22px_rgba(163,230,53,0.04)]
                   "
                 >
 
                   {[
 
                     {
-                      key: "short",
-                      label: "Short Term",
-                      sub: "30 Days",
+                      key:
+                        "short",
+
+                      label:
+                        "Short Term",
+
+                      sub:
+                        "30 Days",
+
                     },
 
                     {
-                      key: "medium",
-                      label: "Medium Term",
-                      sub: "6 Months",
+                      key:
+                        "medium",
+
+                      label:
+                        "Medium Term",
+
+                      sub:
+                        "6 Months",
+
                     },
 
                     {
-                      key: "long",
-                      label: "Long Term",
-                      sub: "12 Months",
+                      key:
+                        "long",
+
+                      label:
+                        "Long Term",
+
+                      sub:
+                        "12 Months",
+
                     },
 
                   ].map(
                     option => (
 
                       <button
-                        key={option.key}
+                        key={
+                          option.key
+                        }
                         type="button"
                         onClick={() =>
                           setActiveHorizon(
@@ -2335,7 +2366,7 @@ function Forecast() {
 
 
               {/* ==================================================
-                  ACTIVE HORIZON HERO
+                  ACTIVE HORIZON
               ================================================== */}
 
               {activeData && (
@@ -2348,7 +2379,6 @@ function Forecast() {
                     border
                     border-lime-300/25
                     bg-[#111C2E]
-                    shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_28px_rgba(163,230,53,0.05)]
                   "
                 >
 
@@ -2421,7 +2451,7 @@ function Forecast() {
 
 
               {/* ==================================================
-                  ALL HORIZONS
+                  PLANNING OVERVIEW
               ================================================== */}
 
               <section className="mt-8">
@@ -2489,7 +2519,9 @@ function Forecast() {
                       return (
 
                         <button
-                          key={item.key}
+                          key={
+                            item.key
+                          }
                           type="button"
                           onClick={() => {
 
@@ -2526,7 +2558,7 @@ function Forecast() {
                           className={`rounded-2xl border p-5 text-left transition ${
                             isActive
                               ? "border-lime-300/45 bg-[#111C2E] shadow-[0_0_12px_rgba(163,230,53,0.18),0_0_30px_rgba(163,230,53,0.06)]"
-                              : "border-lime-300/15 bg-[#111C2E] shadow-[0_0_8px_rgba(163,230,53,0.05)] hover:border-lime-300/30 hover:shadow-[0_0_14px_rgba(163,230,53,0.10)]"
+                              : "border-lime-300/15 bg-[#111C2E] shadow-[0_0_8px_rgba(163,230,53,0.05)] hover:border-lime-300/30"
                           }`}
                         >
 
@@ -2654,7 +2686,7 @@ function Forecast() {
 
 
               {/* ==================================================
-                  DEMAND TREND
+                  DEMAND TRAJECTORY
               ================================================== */}
 
               <section
@@ -2665,7 +2697,6 @@ function Forecast() {
                   border
                   border-lime-300/25
                   bg-[#111C2E]
-                  shadow-[0_0_10px_rgba(163,230,53,0.12),0_0_28px_rgba(163,230,53,0.05)]
                 "
               >
 
@@ -2770,8 +2801,6 @@ function Forecast() {
                         </defs>
 
 
-                        {/* GRID */}
-
                         {[0, 1, 2, 3].map(
                           index => {
 
@@ -2806,8 +2835,6 @@ function Forecast() {
                         )}
 
 
-                        {/* AREA */}
-
                         <path
                           d={
                             trendChart.areaPath
@@ -2815,8 +2842,6 @@ function Forecast() {
                           fill="url(#demandAreaGradient)"
                         />
 
-
-                        {/* LINE */}
 
                         <path
                           d={
@@ -2829,8 +2854,6 @@ function Forecast() {
                           strokeLinejoin="round"
                         />
 
-
-                        {/* POINTS */}
 
                         {trendChart.points.map(
                           point => (
@@ -2911,7 +2934,6 @@ function Forecast() {
 
               </section>
 
-
             </>
 
           )}
@@ -2975,7 +2997,6 @@ function Forecast() {
                       bg-lime-300/5
                       px-4
                       py-3
-                      shadow-[0_0_12px_rgba(163,230,53,0.06)]
                     "
                   >
 
@@ -3002,9 +3023,7 @@ function Forecast() {
             </div>
 
 
-            {/* ==================================================
-                LOADING
-            ================================================== */}
+            {/* LOADING */}
 
             {loadingSeasonal && (
 
@@ -3040,18 +3059,14 @@ function Forecast() {
             )}
 
 
-            {/* ==================================================
-                SEASONAL DATA
-            ================================================== */}
+            {/* SEASONAL DATA */}
 
             {!loadingSeasonal &&
               seasonalData && (
 
                 <div className="p-6 sm:p-7">
 
-                  {/* ==================================================
-                      PRODUCT CONTEXT
-                  ================================================== */}
+                  {/* PRODUCT CONTEXT */}
 
                   <div
                     className="
@@ -3060,7 +3075,6 @@ function Forecast() {
                       border-lime-300/15
                       bg-[#0B1220]
                       p-4
-                      shadow-[0_0_10px_rgba(163,230,53,0.04)]
                     "
                   >
 
@@ -3127,9 +3141,7 @@ function Forecast() {
                   </div>
 
 
-                  {/* ==================================================
-                      SEASONAL SUMMARY
-                  ================================================== */}
+                  {/* SUMMARY */}
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -3140,7 +3152,6 @@ function Forecast() {
                         border-lime-300/15
                         bg-[#0B1220]
                         p-5
-                        shadow-[0_0_10px_rgba(163,230,53,0.04)]
                       "
                     >
 
@@ -3169,7 +3180,6 @@ function Forecast() {
                         border-lime-300/10
                         bg-[#0B1220]
                         p-5
-                        shadow-[0_0_10px_rgba(163,230,53,0.03)]
                       "
                     >
 
@@ -3198,7 +3208,6 @@ function Forecast() {
                         border-lime-300/10
                         bg-[#0B1220]
                         p-5
-                        shadow-[0_0_10px_rgba(163,230,53,0.03)]
                       "
                     >
 
@@ -3226,7 +3235,6 @@ function Forecast() {
                         border-lime-300/15
                         bg-[#0B1220]
                         p-5
-                        shadow-[0_0_10px_rgba(163,230,53,0.04)]
                       "
                     >
 
@@ -3247,9 +3255,7 @@ function Forecast() {
                   </div>
 
 
-                  {/* ==================================================
-                      SEASONAL CHART
-                  ================================================== */}
+                  {/* SEASONAL CHART */}
 
                   {seasonalChart && (
 
@@ -3262,7 +3268,6 @@ function Forecast() {
                         border-lime-300/10
                         bg-[#0B1220]
                         p-4
-                        shadow-[0_0_12px_rgba(163,230,53,0.04)]
                         sm:p-6
                       "
                     >
@@ -3354,16 +3359,13 @@ function Forecast() {
                             </defs>
 
 
-                            {/* GRID */}
-
                             {[0, 1, 2, 3].map(
                               index => {
 
                                 const y =
                                   seasonalChart.paddingTop +
                                   (
-                                    index /
-                                    3
+                                    index / 3
                                   ) *
                                   seasonalChart.chartHeight;
 
@@ -3391,8 +3393,6 @@ function Forecast() {
                             )}
 
 
-                            {/* AREA */}
-
                             <path
                               d={
                                 seasonalChart.areaPath
@@ -3400,8 +3400,6 @@ function Forecast() {
                               fill="url(#seasonalAreaGradient)"
                             />
 
-
-                            {/* LINE */}
 
                             <path
                               d={
@@ -3414,8 +3412,6 @@ function Forecast() {
                               strokeLinejoin="round"
                             />
 
-
-                            {/* POINTS */}
 
                             {seasonalChart.points.map(
                               point => {
@@ -3559,7 +3555,7 @@ function Forecast() {
                       </div>
 
 
-                      {/* PEAK / LOWEST INDICATORS */}
+                      {/* PEAK / LOWEST */}
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
 
@@ -3573,7 +3569,6 @@ function Forecast() {
                             border-lime-300/15
                             bg-lime-300/5
                             p-4
-                            shadow-[0_0_10px_rgba(163,230,53,0.04)]
                           "
                         >
 
@@ -3658,9 +3653,7 @@ function Forecast() {
                   )}
 
 
-                  {/* ==================================================
-                      SOURCE
-                  ================================================== */}
+                  {/* SOURCE */}
 
                   <div
                     className="
@@ -3726,9 +3719,7 @@ function Forecast() {
               )}
 
 
-            {/* ==================================================
-                NO SEASONAL DATA
-            ================================================== */}
+            {/* NO SEASONAL DATA */}
 
             {!loadingSeasonal &&
               !seasonalData && (
@@ -3791,7 +3782,6 @@ function Forecast() {
               border-lime-300/10
               bg-[#111C2E]
               p-4
-              shadow-[0_0_10px_rgba(163,230,53,0.04)]
             "
           >
 
