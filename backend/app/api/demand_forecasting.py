@@ -408,149 +408,63 @@ def predict_demand_index(
 def get_demand_forecast(
     data: DemandForecastRequest
 ):
+
     try:
+
+        # --------------------------------------------------------
+        # Prepare input
+        # --------------------------------------------------------
+
         input_data = data.model_dump()
+
+        # --------------------------------------------------------
+        # Generate production forecast
+        # --------------------------------------------------------
 
         forecast_result = generate_demand_forecast(
             input_data
         )
 
-        current_demand = float(
-            forecast_result["current_demand"]
-        )
-
-        current_price = float(
-            input_data["current_price"]
-        )
-
-        base_date = __import__(
-            "pandas"
-        ).Timestamp(
-            year=int(input_data["year"]),
-            month=int(input_data["month"]),
-            day=int(input_data["day"])
-        )
-
-        horizons = [
-            ("7_days", 7),
-            ("14_days", 14),
-            ("30_days", 30),
-            ("3_months", 90),
-            ("6_months", 180),
-            ("12_months", 365)
-        ]
-
-        result = {}
-
-        for horizon_name, forecast_days in horizons:
-
-            predicted_daily_demand = float(
-                forecast_result[
-                    "short_term"
-                    if forecast_days <= 30
-                    else "medium_term"
-                    if forecast_days <= 180
-                    else "long_term"
-                ][
-                    horizon_name
-                ]
-            )
-
-            forecast_start = (
-                base_date
-                + __import__("pandas").Timedelta(days=1)
-            )
-
-            forecast_end = (
-                base_date
-                + __import__("pandas").Timedelta(
-                    days=forecast_days
-                )
-            )
-
-            total_demand = (
-                predicted_daily_demand
-                * forecast_days
-            )
-
-            total_revenue = (
-                total_demand
-                * current_price
-            )
-
-            if current_demand != 0:
-
-                trend_change = (
-                    (
-                        predicted_daily_demand
-                        - current_demand
-                    )
-                    / abs(current_demand)
-                ) * 100
-
-            else:
-                trend_change = 0.0
-
-            if trend_change >= 5:
-                demand_trend = "INCREASING"
-
-            elif trend_change <= -5:
-                demand_trend = "DECREASING"
-
-            else:
-                demand_trend = "STABLE"
-
-            result[horizon_name] = {
-                "forecast_horizon": horizon_name,
-                "forecast_start":
-                    forecast_start.strftime("%Y-%m-%d"),
-                "forecast_end":
-                    forecast_end.strftime("%Y-%m-%d"),
-                "forecast_days":
-                    forecast_days,
-
-                "production_model":
-                    "XGBoost Demand Forecasting Model",
-
-                "total_predicted_demand":
-                    round(total_demand, 2),
-
-                "average_daily_demand":
-                    round(predicted_daily_demand, 2),
-
-                "maximum_daily_demand":
-                    round(predicted_daily_demand, 2),
-
-                "minimum_daily_demand":
-                    round(predicted_daily_demand, 2),
-
-                "total_predicted_revenue":
-                    round(total_revenue, 2),
-
-                "demand_trend":
-                    demand_trend,
-
-                "trend_change_percent":
-                    round(trend_change, 2),
-
-                "confidence_score":
-                    round(
-                        float(
-                            forecast_result[
-                                "confidence_score"
-                            ]
-                        ),
-                        2
-                    )
-            }
+        # --------------------------------------------------------
+        # The new prediction pipeline already returns
+        # complete horizon objects.
+        #
+        # No short_term / medium_term / long_term
+        # grouping is required anymore.
+        # --------------------------------------------------------
 
         return {
-            "seven_days": result["7_days"],
-            "fourteen_days": result["14_days"],
-            "thirty_days": result["30_days"],
-            "three_months": result["3_months"],
-            "six_months": result["6_months"],
-            "twelve_months": result["12_months"]
+
+            "seven_days":
+                forecast_result[
+                    "seven_days"
+                ],
+
+            "fourteen_days":
+                forecast_result[
+                    "fourteen_days"
+                ],
+
+            "thirty_days":
+                forecast_result[
+                    "thirty_days"
+                ],
+
+            "three_months":
+                forecast_result[
+                    "three_months"
+                ],
+
+            "six_months":
+                forecast_result[
+                    "six_months"
+                ],
+
+            "twelve_months":
+                forecast_result[
+                    "twelve_months"
+                ]
+
         }
 
     except Exception as e:

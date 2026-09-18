@@ -8,8 +8,11 @@
 # Production model:
 #     XGBRegressor
 #
-# The API constructs the exact feature structure expected
-# by the saved preprocessing pipeline.
+# The model predicts NEXT-DAY demand.
+#
+# Multi-horizon forecasting is therefore performed
+# recursively: each predicted day is used to update the
+# rolling demand features for the following day.
 #
 # ============================================================
 
@@ -23,11 +26,6 @@ from .model import (
 
 # ============================================================
 # PRODUCTION FEATURES
-# ============================================================
-#
-# These are the exact 20 features expected by the saved
-# demand forecasting preprocessor.
-#
 # ============================================================
 
 FEATURE_COLUMNS = [
@@ -210,19 +208,12 @@ def build_model_input(
     }
 
 
-    # ========================================================
-    # CREATE ONE-ROW DATAFRAME
-    # ========================================================
-
     input_df = pd.DataFrame(
         [row]
     )
 
 
-    # ========================================================
-    # GUARANTEE EXACT FEATURE ORDER
-    # ========================================================
-
+    # Guarantee exact feature order.
     input_df = input_df[
         FEATURE_COLUMNS
     ]
@@ -239,8 +230,8 @@ def predict_demand(
     input_data: dict
 ) -> float:
     """
-    Generate a demand prediction using the production
-    XGBRegressor model.
+    Generate a next-day demand prediction using the
+    production XGBRegressor model.
     """
 
     input_df = build_model_input(
@@ -248,9 +239,9 @@ def predict_demand(
     )
 
 
-    # ========================================================
-    # PREPROCESS INPUT
-    # ========================================================
+    # --------------------------------------------------------
+    # PREPROCESS
+    # --------------------------------------------------------
 
     processed_data = (
         preprocessor.transform(
@@ -259,9 +250,9 @@ def predict_demand(
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # MODEL PREDICTION
-    # ========================================================
+    # --------------------------------------------------------
 
     prediction = (
         model.predict(
@@ -275,10 +266,7 @@ def predict_demand(
     )
 
 
-    # ========================================================
-    # DEMAND CANNOT BE NEGATIVE
-    # ========================================================
-
+    # Demand cannot be negative.
     predicted_demand = max(
         predicted_demand,
         0.0
@@ -289,6 +277,32 @@ def predict_demand(
 
 
 # ============================================================
+# HELPER: CURRENT SEASON
+# ============================================================
+
+def _get_season(
+    month: int
+) -> str:
+    """
+    Determine a simple seasonal label from the month.
+
+    This is only used when the API request does not already
+    provide a season.
+    """
+
+    if month in [3, 4, 5]:
+        return "Summer"
+
+    if month in [6, 7, 8, 9]:
+        return "Monsoon"
+
+    if month in [10, 11]:
+        return "Autumn"
+
+    return "Winter"
+
+
+# ============================================================
 # MULTI-HORIZON DEMAND FORECAST
 # ============================================================
 
@@ -296,7 +310,7 @@ def generate_demand_forecast(
     input_data: dict
 ) -> dict:
     """
-    Generate demand predictions for:
+    Generate recursive demand forecasts for:
 
         7 days
         14 days
@@ -305,19 +319,128 @@ def generate_demand_forecast(
         6 months
         12 months
 
-    The production model is evaluated for each horizon
-    using projected calendar, sales and inventory features.
+    The production model predicts next-day demand.
+
+    Therefore this function predicts one future day at a time.
+    The prediction is then added to the rolling-demand history
+    before predicting the next day.
+
+    The returned structure is compatible with the
+    DemandForecast API layer.
     """
 
-
     # ========================================================
-    # CURRENT PREDICTION
+    # BASE DATE
     # ========================================================
 
-    current_prediction = (
-        predict_demand(
-            input_data
+    try:
+
+        base_date = pd.Timestamp(
+            year=int(
+                input_data["year"]
+            ),
+            month=int(
+                input_data["month"]
+            ),
+            day=int(
+                input_data["day"]
+            )
         )
+
+    except Exception:
+
+        base_date = (
+            pd.Timestamp.today()
+            .normalize()
+        )
+
+
+    # ========================================================
+    # INITIAL ROLLING VALUES
+    # ========================================================
+
+    sales_3 = max(
+        float(
+            input_data.get(
+                "sales_rolling_3",
+                0
+            )
+        ),
+        0.0
+    )
+
+    sales_7 = max(
+        float(
+            input_data.get(
+                "sales_rolling_7",
+                0
+            )
+        ),
+        0.0
+    )
+
+    sales_14 = max(
+        float(
+            input_data.get(
+                "sales_rolling_14",
+                0
+            )
+        ),
+        0.0
+    )
+
+
+    # ========================================================
+    # INITIAL DAILY BASELINE
+    # ========================================================
+    #
+    # The API supplies rolling demand values rather than the
+    # individual previous 14 days.
+    #
+    # We therefore construct a stable initial history.
+    #
+    # Once recursive predictions begin, the actual predicted
+    # values replace this initial history.
+    #
+    # ========================================================
+
+    if sales_3 > 0:
+
+        baseline_daily = sales_3
+
+    elif sales_7 > 0:
+
+        baseline_daily = sales_7
+
+    elif sales_14 > 0:
+
+        baseline_daily = sales_14
+
+    else:
+
+        baseline_daily = 0.0
+
+
+    history = [
+        float(
+            baseline_daily
+        )
+        for _ in range(14)
+    ]
+
+
+    # ========================================================
+    # INITIAL INVENTORY
+    # ========================================================
+
+    initial_inventory = max(
+        float(
+            input_data.get(
+                "inventory_level",
+                0
+            )
+        ),
+        0.0
     )
 
 
@@ -342,100 +465,21 @@ def generate_demand_forecast(
     }
 
 
-    forecasts = {}
-
-
     # ========================================================
-    # BASE DATE
+    # RECURSIVE DAILY FORECAST
     # ========================================================
 
-    try:
+    daily_predictions = []
 
-        base_date = pd.Timestamp(
-
-            year=int(
-                input_data["year"]
-            ),
-
-            month=int(
-                input_data["month"]
-            ),
-
-            day=int(
-                input_data["day"]
-            )
-
-        )
-
-    except Exception:
-
-        base_date = pd.Timestamp.today()
-
-
-    # ========================================================
-    # SALES SIGNALS
-    # ========================================================
-
-    sales_3 = float(
-        input_data.get(
-            "sales_rolling_3",
-            0
-        )
-    )
-
-    sales_7 = float(
-        input_data.get(
-            "sales_rolling_7",
-            0
-        )
-    )
-
-    sales_14 = float(
-        input_data.get(
-            "sales_rolling_14",
-            0
-        )
+    current_inventory = (
+        initial_inventory
     )
 
 
-    # ========================================================
-    # SALES TREND
-    # ========================================================
-
-    if sales_14 > 0:
-
-        short_term_ratio = (
-            sales_3
-            /
-            (sales_14 / 14.0)
-        )
-
-    else:
-
-        short_term_ratio = 1.0
-
-
-    short_term_ratio = max(
-        0.80,
-        min(
-            short_term_ratio,
-            1.20
-        )
-    )
-
-
-    # ========================================================
-    # GENERATE HORIZONS
-    # ========================================================
-
-    for horizon_name, days_ahead in (
-        horizons.items()
+    for day_number in range(
+        1,
+        366
     ):
-
-        forecast_input = (
-            input_data.copy()
-        )
-
 
         # ----------------------------------------------------
         # FUTURE DATE
@@ -445,8 +489,47 @@ def generate_demand_forecast(
             base_date
             +
             pd.Timedelta(
-                days=days_ahead
+                days=day_number
             )
+        )
+
+
+        # ----------------------------------------------------
+        # UPDATE ROLLING FEATURES
+        # ----------------------------------------------------
+
+        recent_3 = history[-3:]
+
+        recent_7 = history[-7:]
+
+        recent_14 = history[-14:]
+
+
+        rolling_3 = (
+            sum(recent_3)
+            /
+            len(recent_3)
+        )
+
+        rolling_7 = (
+            sum(recent_7)
+            /
+            len(recent_7)
+        )
+
+        rolling_14 = (
+            sum(recent_14)
+            /
+            len(recent_14)
+        )
+
+
+        # ----------------------------------------------------
+        # BUILD FUTURE INPUT
+        # ----------------------------------------------------
+
+        forecast_input = (
+            input_data.copy()
         )
 
 
@@ -467,156 +550,69 @@ def generate_demand_forecast(
         )
 
 
-        # ----------------------------------------------------
-        # TREND ATTENUATION BY HORIZON
-        # ----------------------------------------------------
-
-        if days_ahead <= 7:
-
-            trend_factor = (
-                short_term_ratio
-            )
-
-        elif days_ahead <= 14:
-
-            trend_factor = (
-                short_term_ratio * 0.75
-                +
-                0.25
-            )
-
-        elif days_ahead <= 30:
-
-            trend_factor = (
-                short_term_ratio * 0.50
-                +
-                0.50
-            )
-
-        elif days_ahead <= 90:
-
-            trend_factor = (
-                short_term_ratio * 0.35
-                +
-                0.65
-            )
-
-        elif days_ahead <= 180:
-
-            trend_factor = (
-                short_term_ratio * 0.20
-                +
-                0.80
-            )
-
-        else:
-
-            trend_factor = (
-                short_term_ratio * 0.10
-                +
-                0.90
-            )
-
-
-        # ----------------------------------------------------
-        # PROJECT SALES SIGNALS
-        # ----------------------------------------------------
-
         forecast_input[
             "sales_rolling_3"
-        ] = (
-            sales_3
-            * trend_factor
-        )
+        ] = rolling_3
 
         forecast_input[
             "sales_rolling_7"
-        ] = (
-            sales_7
-            * trend_factor
-        )
+        ] = rolling_7
 
         forecast_input[
             "sales_rolling_14"
-        ] = (
-            sales_14
-            * trend_factor
-        )
+        ] = rolling_14
 
 
         # ----------------------------------------------------
-        # INVENTORY PROJECTION
+        # UPDATE SEASON
+        # ----------------------------------------------------
+        #
+        # Keep the user's supplied season when present.
+        # Otherwise calculate it from the future month.
+        #
         # ----------------------------------------------------
 
-        current_inventory = float(
-            input_data.get(
-                "inventory_level",
-                0
-            )
-        )
+        if not forecast_input.get(
+            "season"
+        ):
 
-
-        if sales_14 > 0:
-
-            estimated_daily_sales = (
-                sales_14 / 14.0
+            forecast_input[
+                "season"
+            ] = _get_season(
+                forecast_date.month
             )
 
-        elif sales_7 > 0:
 
-            estimated_daily_sales = (
-                sales_7 / 7.0
-            )
-
-        elif sales_3 > 0:
-
-            estimated_daily_sales = (
-                sales_3 / 3.0
-            )
-
-        else:
-
-            estimated_daily_sales = 0.0
-
-
-        projected_inventory = (
-
-            current_inventory
-
-            -
-
-            estimated_daily_sales
-            * days_ahead
-
-        )
-
-
-        projected_inventory = max(
-            0.0,
-            projected_inventory
-        )
-
+        # ----------------------------------------------------
+        # INVENTORY
+        # ----------------------------------------------------
+        #
+        # Inventory represents stock available before the
+        # current day's predicted demand.
+        #
+        # ----------------------------------------------------
 
         forecast_input[
             "inventory_level"
-        ] = (
-            projected_inventory
+        ] = max(
+            current_inventory,
+            0.0
         )
 
 
         # ----------------------------------------------------
-        # STOCKOUT
+        # STOCKOUT STATUS
         # ----------------------------------------------------
 
         forecast_input[
             "stockout_flag"
         ] = int(
-            projected_inventory <= 0
+            current_inventory <= 0
         )
 
 
         # ----------------------------------------------------
-        # PREDICT
+        # PREDICT NEXT DAY
         # ----------------------------------------------------
 
         predicted_demand = (
@@ -626,103 +622,335 @@ def generate_demand_forecast(
         )
 
 
-        forecasts[
-            horizon_name
-        ] = round(
+        predicted_demand = max(
             float(
                 predicted_demand
             ),
-            2
+            0.0
+        )
+
+
+        # ----------------------------------------------------
+        # STORE PREDICTION
+        # ----------------------------------------------------
+
+        daily_predictions.append(
+            predicted_demand
+        )
+
+
+        # ----------------------------------------------------
+        # UPDATE INVENTORY
+        # ----------------------------------------------------
+
+        current_inventory = max(
+            0.0,
+            current_inventory
+            -
+            predicted_demand
+        )
+
+
+        # ----------------------------------------------------
+        # UPDATE HISTORY
+        # ----------------------------------------------------
+
+        history.append(
+            predicted_demand
         )
 
 
     # ========================================================
-    # TREND ANALYSIS
+    # CURRENT MODEL PREDICTION
     # ========================================================
 
-    final_prediction = (
-        forecasts[
-            "12_months"
-        ]
+    current_prediction = (
+        predict_demand(
+            input_data
+        )
+    )
+
+    current_prediction = max(
+        float(
+            current_prediction
+        ),
+        0.0
     )
 
 
-    if current_prediction != 0:
+    # ========================================================
+    # PRODUCTION MODEL NAME
+    # ========================================================
 
-        percentage_change = (
+    production_model = (
+        type(model).__name__
+    )
 
-            (
-                final_prediction
-                -
-                current_prediction
+
+    # ========================================================
+    # BUILD HORIZON RESULTS
+    # ========================================================
+
+    forecasts = {}
+
+
+    for horizon_name, days in (
+        horizons.items()
+    ):
+
+        values = (
+            daily_predictions[
+                :days
+            ]
+        )
+
+
+        # ----------------------------------------------------
+        # TOTAL DEMAND
+        # ----------------------------------------------------
+
+        total_demand = sum(
+            values
+        )
+
+
+        # ----------------------------------------------------
+        # AVERAGE DAILY DEMAND
+        # ----------------------------------------------------
+
+        if values:
+
+            average_daily_demand = (
+                total_demand
+                /
+                len(values)
             )
 
-            /
+        else:
 
-            abs(
-                current_prediction
+            average_daily_demand = 0.0
+
+
+        # ----------------------------------------------------
+        # MAXIMUM / MINIMUM
+        # ----------------------------------------------------
+
+        if values:
+
+            maximum_daily_demand = max(
+                values
             )
 
-        ) * 100
+            minimum_daily_demand = min(
+                values
+            )
 
-    else:
+        else:
 
-        percentage_change = 0.0
+            maximum_daily_demand = 0.0
+
+            minimum_daily_demand = 0.0
 
 
-    if percentage_change >= 5:
+        # ----------------------------------------------------
+        # REVENUE
+        # ----------------------------------------------------
 
-        trend = "INCREASING"
+        current_price = max(
+            float(
+                input_data.get(
+                    "current_price",
+                    0
+                )
+            ),
+            0.0
+        )
 
-    elif percentage_change <= -5:
 
-        trend = "DECREASING"
+        total_predicted_revenue = (
+            total_demand
+            *
+            current_price
+        )
 
-    else:
 
-        trend = "STABLE"
+        # ----------------------------------------------------
+        # HORIZON TREND
+        # ----------------------------------------------------
+
+        if current_prediction > 0:
+
+            horizon_change = (
+
+                (
+                    average_daily_demand
+                    -
+                    current_prediction
+                )
+
+                /
+
+                current_prediction
+
+            ) * 100
+
+        else:
+
+            if average_daily_demand > 0:
+
+                horizon_change = 100.0
+
+            else:
+
+                horizon_change = 0.0
+
+
+        if horizon_change >= 5:
+
+            horizon_trend = "INCREASING"
+
+        elif horizon_change <= -5:
+
+            horizon_trend = "DECREASING"
+
+        else:
+
+            horizon_trend = "STABLE"
+
+
+        # ----------------------------------------------------
+        # STORE HORIZON
+        # ----------------------------------------------------
+
+        forecasts[
+            horizon_name
+        ] = {
+
+            "forecast_horizon":
+                horizon_name,
+
+            "forecast_start":
+                (
+                    base_date
+                    +
+                    pd.Timedelta(
+                        days=1
+                    )
+                ).strftime(
+                    "%Y-%m-%d"
+                ),
+
+            "forecast_end":
+                (
+                    base_date
+                    +
+                    pd.Timedelta(
+                        days=days
+                    )
+                ).strftime(
+                    "%Y-%m-%d"
+                ),
+
+            "forecast_days":
+                days,
+
+            "production_model":
+                production_model,
+
+            "total_predicted_demand":
+                round(
+                    float(
+                        total_demand
+                    ),
+                    2
+                ),
+
+            "average_daily_demand":
+                round(
+                    float(
+                        average_daily_demand
+                    ),
+                    2
+                ),
+
+            "maximum_daily_demand":
+                round(
+                    float(
+                        maximum_daily_demand
+                    ),
+                    2
+                ),
+
+            "minimum_daily_demand":
+                round(
+                    float(
+                        minimum_daily_demand
+                    ),
+                    2
+                ),
+
+            "total_predicted_revenue":
+                round(
+                    float(
+                        total_predicted_revenue
+                    ),
+                    2
+                ),
+
+            "demand_trend":
+                horizon_trend,
+
+            "trend_change_percent":
+                round(
+                    float(
+                        horizon_change
+                    ),
+                    2
+                ),
+
+            "confidence_score":
+                0.0
+        }
 
 
     # ========================================================
     # CONFIDENCE SCORE
     # ========================================================
+    #
+    # This is a heuristic stability indicator.
+    # It is NOT a statistical confidence interval.
+    #
+    # ========================================================
 
-    forecast_values = list(
-        forecasts.values()
-    )
+    valid_values = [
+        float(value)
+        for value in daily_predictions
+        if float(value) >= 0
+    ]
 
 
-    if forecast_values:
+    if valid_values:
 
         mean_forecast = (
-            sum(
-                forecast_values
-            )
+            sum(valid_values)
             /
-            len(
-                forecast_values
-            )
+            len(valid_values)
         )
 
-        if mean_forecast != 0:
+
+        if mean_forecast > 0:
 
             variation = (
 
                 (
-                    max(
-                        forecast_values
-                    )
+                    max(valid_values)
                     -
-                    min(
-                        forecast_values
-                    )
+                    min(valid_values)
                 )
 
                 /
 
-                abs(
-                    mean_forecast
-                )
+                mean_forecast
 
             )
 
@@ -736,9 +964,9 @@ def generate_demand_forecast(
 
 
     confidence = (
-        100
+        100.0
         -
-        variation * 100
+        variation * 100.0
     )
 
 
@@ -752,66 +980,65 @@ def generate_demand_forecast(
 
 
     # ========================================================
-    # RESPONSE
+    # APPLY CONFIDENCE TO ALL HORIZONS
+    # ========================================================
+
+    for horizon_name in forecasts:
+
+        forecasts[
+            horizon_name
+        ][
+            "confidence_score"
+        ] = round(
+            float(
+                confidence
+            ),
+            2
+        )
+
+
+    # ========================================================
+    # FINAL RESPONSE
     # ========================================================
 
     return {
 
-        "current_demand":
-            round(
-                float(
-                    current_prediction
-                ),
-                2
+    "current_demand":
+        round(
+            float(
+                current_prediction
             ),
+            2
+        ),
 
-        "short_term": {
+    "seven_days":
+        forecasts[
+            "7_days"
+        ],
 
-            "7_days":
-                forecasts["7_days"],
+    "fourteen_days":
+        forecasts[
+            "14_days"
+        ],
 
-            "14_days":
-                forecasts["14_days"],
+    "thirty_days":
+        forecasts[
+            "30_days"
+        ],
 
-            "30_days":
-                forecasts["30_days"]
+    "three_months":
+        forecasts[
+            "3_months"
+        ],
 
-        },
+    "six_months":
+        forecasts[
+            "6_months"
+        ],
 
-        "medium_term": {
+    "twelve_months":
+        forecasts[
+            "12_months"
+        ]
 
-            "3_months":
-                forecasts["3_months"],
-
-            "6_months":
-                forecasts["6_months"]
-
-        },
-
-        "long_term": {
-
-            "12_months":
-                forecasts["12_months"]
-
-        },
-
-        "trend":
-            trend,
-
-        "trend_change_pct":
-            round(
-                float(
-                    percentage_change
-                ),
-                2
-            ),
-
-        "confidence_score":
-            round(
-                float(
-                    confidence
-                ),
-                2
-            )
-
-    }
+}
