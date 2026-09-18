@@ -1,3 +1,4 @@
+
 # ============================================================
 # DEMAND FORECASTING API PREDICTION ENGINE
 # ============================================================
@@ -207,17 +208,14 @@ def build_model_input(
         )
     }
 
-
     input_df = pd.DataFrame(
         [row]
     )
-
 
     # Guarantee exact feature order.
     input_df = input_df[
         FEATURE_COLUMNS
     ]
-
 
     return input_df
 
@@ -232,48 +230,152 @@ def predict_demand(
     """
     Generate a next-day demand prediction using the
     production XGBRegressor model.
+
+    Diagnostic logging is included so that Render logs
+    reveal the exact raw prediction before any
+    non-negative correction is applied.
     """
 
-    input_df = build_model_input(
-        input_data
-    )
+    print("=" * 70)
+    print("DEMAND PREDICTION DEBUG")
+    print("=" * 70)
 
+    try:
 
-    # --------------------------------------------------------
-    # PREPROCESS
-    # --------------------------------------------------------
+        # ----------------------------------------------------
+        # BUILD INPUT
+        # ----------------------------------------------------
 
-    processed_data = (
-        preprocessor.transform(
-            input_df
+        input_df = build_model_input(
+            input_data
         )
-    )
 
-
-    # --------------------------------------------------------
-    # MODEL PREDICTION
-    # --------------------------------------------------------
-
-    prediction = (
-        model.predict(
-            processed_data
+        print(
+            "Input dataframe:"
         )
-    )
+
+        print(
+            input_df.to_dict(
+                orient="records"
+            )
+        )
+
+        print(
+            "Input dataframe shape:",
+            input_df.shape
+        )
+
+        print(
+            "Input dataframe columns:",
+            list(
+                input_df.columns
+            )
+        )
 
 
-    predicted_demand = float(
-        prediction[0]
-    )
+        # ----------------------------------------------------
+        # PREPROCESS
+        # ----------------------------------------------------
+
+        processed_data = (
+            preprocessor.transform(
+                input_df
+            )
+        )
+
+        print(
+            "Processed data shape:",
+            getattr(
+                processed_data,
+                "shape",
+                "unknown"
+            )
+        )
 
 
-    # Demand cannot be negative.
-    predicted_demand = max(
-        predicted_demand,
-        0.0
-    )
+        # ----------------------------------------------------
+        # MODEL PREDICTION
+        # ----------------------------------------------------
+
+        prediction = (
+            model.predict(
+                processed_data
+            )
+        )
+
+        print(
+            "Raw model prediction:",
+            prediction
+        )
 
 
-    return predicted_demand
+        # ----------------------------------------------------
+        # EXTRACT VALUE
+        # ----------------------------------------------------
+
+        predicted_demand = float(
+            prediction[0]
+        )
+
+        print(
+            "Raw predicted demand:",
+            predicted_demand
+        )
+
+
+        # ----------------------------------------------------
+        # VALIDATE VALUE
+        # ----------------------------------------------------
+
+        if pd.isna(
+            predicted_demand
+        ):
+
+            raise ValueError(
+                "Model returned NaN demand."
+            )
+
+
+        # ----------------------------------------------------
+        # NON-NEGATIVE DEMAND
+        # ----------------------------------------------------
+
+        predicted_demand = max(
+            predicted_demand,
+            0.0
+        )
+
+        print(
+            "Final predicted demand:",
+            predicted_demand
+        )
+
+        print("=" * 70)
+
+        return predicted_demand
+
+
+    except Exception as e:
+
+        print("=" * 70)
+
+        print(
+            "DEMAND PREDICTION FAILED"
+        )
+
+        print(
+            "Error type:",
+            type(e).__name__
+        )
+
+        print(
+            "Error:",
+            str(e)
+        )
+
+        print("=" * 70)
+
+        raise
 
 
 # ============================================================
@@ -1003,42 +1105,43 @@ def generate_demand_forecast(
 
     return {
 
-    "current_demand":
-        round(
-            float(
-                current_prediction
+        "current_demand":
+            round(
+                float(
+                    current_prediction
+                ),
+                2
             ),
-            2
-        ),
 
-    "seven_days":
-        forecasts[
-            "7_days"
-        ],
+        "seven_days":
+            forecasts[
+                "7_days"
+            ],
 
-    "fourteen_days":
-        forecasts[
-            "14_days"
-        ],
+        "fourteen_days":
+            forecasts[
+                "14_days"
+            ],
 
-    "thirty_days":
-        forecasts[
-            "30_days"
-        ],
+        "thirty_days":
+            forecasts[
+                "30_days"
+            ],
 
-    "three_months":
-        forecasts[
-            "3_months"
-        ],
+        "three_months":
+            forecasts[
+                "3_months"
+            ],
 
-    "six_months":
-        forecasts[
-            "6_months"
-        ],
+        "six_months":
+            forecasts[
+                "6_months"
+            ],
 
-    "twelve_months":
-        forecasts[
-            "12_months"
-        ]
+        "twelve_months":
+            forecasts[
+                "12_months"
+            ]
 
-}
+    }
+
